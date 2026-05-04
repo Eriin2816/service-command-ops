@@ -1,0 +1,64 @@
+import { Droplets } from "lucide-react";
+import { adminNavItems } from "@/config/navigation";
+import { SidebarNavItem } from "./SidebarNavItem";
+
+interface SidebarProps {
+  className?: string;
+}
+
+const mainNavItems = adminNavItems.filter((item) => !item.pinBottom);
+const bottomNavItems = adminNavItems.filter((item) => item.pinBottom);
+
+export function Sidebar({ className }: SidebarProps) {
+  return (
+    <aside
+      className={`flex h-full w-60 flex-col ${className ?? ""}`}
+      style={{ backgroundColor: "#0C1E2E" }}
+    >
+      {/* Logo */}
+      <div
+        className="flex h-16 shrink-0 items-center gap-2.5 px-4"
+        style={{ borderBottom: "1px solid #1E3348" }}
+      >
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500">
+          <Droplets className="h-4 w-4 text-white" />
+        </div>
+        <div className="flex flex-col leading-tight">
+          <span className="font-display text-sm font-semibold tracking-tight text-white">
+            ServiceOps
+          </span>
+          <span className="text-[10px] font-medium uppercase tracking-widest text-sidebar-text">
+            Command Center
+          </span>
+        </div>
+      </div>
+
+      {/* Main nav */}
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
+        {mainNavItems.map((item) => (
+          <SidebarNavItem key={item.href} item={item} />
+        ))}
+      </nav>
+
+      {/* Bottom nav (Settings) */}
+      <div
+        className="shrink-0 px-3 pb-4 pt-2"
+        style={{ borderTop: "1px solid #1E3348" }}
+      >
+        {bottomNavItems.map((item) => (
+          <SidebarNavItem key={item.href} item={item} />
+        ))}
+
+        {/* Tenant badge */}
+        <div className="mt-3 rounded-lg px-3 py-2.5" style={{ backgroundColor: "#132C42" }}>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-text">
+            Tenant
+          </p>
+          <p className="mt-0.5 truncate text-xs font-medium text-white">
+            Showtime Pool Service
+          </p>
+        </div>
+      </div>
+    </aside>
+  );
+}

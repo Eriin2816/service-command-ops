@@ -1,0 +1,122 @@
+
+> serviceops-ghl-workorders@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.5.15
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.1.232:3000
+
+ ✓ Starting...
+ ✓ Ready in 6.8s
+ ○ Compiling /dashboard/work-orders/[id] ...
+ ✓ Compiled /dashboard/work-orders/[id] in 10.5s (729 modules)
+ ✓ Compiled in 482ms (297 modules)
+ GET /dashboard/work-orders/wo-001 200 in 11729ms
+ GET /dashboard/work-orders/wo-002 200 in 105ms
+ ✓ Compiled in 105ms (283 modules)
+ ✓ Compiled in 165ms (297 modules)
+ GET /dashboard/work-orders/wo-002 200 in 85ms
+ ✓ Compiled in 147ms (297 modules)
+ GET /dashboard/work-orders/wo-002 200 in 58ms
+ ✓ Compiled in 178ms (297 modules)
+ ✓ Compiled in 137ms (297 modules)
+ GET /dashboard/work-orders/wo-002 200 in 171ms
+ GET /dashboard/work-orders/wo-002 200 in 43ms
+ ✓ Compiled in 117ms (297 modules)
+ ✓ Compiled in 113ms (297 modules)
+ GET /dashboard/work-orders/wo-002 200 in 136ms
+ GET /dashboard/work-orders/wo-002 200 in 36ms
+ ✓ Compiled in 140ms (297 modules)
+ GET /dashboard/work-orders/wo-002 200 in 48ms
+ ○ Compiling /dashboard/work-orders ...
+ ✓ Compiled /dashboard/work-orders in 1135ms (934 modules)
+ GET /dashboard/work-orders 200 in 1497ms
+ ○ Compiling /api/work-orders ...
+ ✓ Compiled /api/work-orders in 691ms (1020 modules)
+ POST /api/work-orders 201 in 891ms
+ POST /api/work-orders 201 in 23ms
+ ✓ Compiled in 343ms (921 modules)
+ ✓ Compiled in 286ms (921 modules)
+ ✓ Compiled in 165ms (391 modules)
+ GET /dashboard/work-orders 200 in 234ms
+ ✓ Compiled in 90ms (391 modules)
+ GET /dashboard/work-orders 200 in 40ms
+ ✓ Compiled in 134ms (391 modules)
+ GET /dashboard/work-orders 200 in 45ms
+ GET /dashboard/work-orders 200 in 149ms
+ ✓ Compiled in 294ms (935 modules)
+ GET /dashboard/work-orders 200 in 99ms
+ ✓ Compiled /api/work-orders in 196ms (644 modules)
+ GET /api/work-orders 200 in 324ms
+ GET /dashboard/work-orders 200 in 176ms
+ GET /api/work-orders?status=completed 200 in 13ms
+ GET /api/work-orders?category=pool_repair 200 in 13ms
+ GET /api/work-orders?status=flying 400 in 9ms
+ GET /api/work-orders?status=flying 400 in 11ms
+ GET /api/work-orders?status=flying 400 in 11ms
+ GET /api/work-orders?status=flying 400 in 9ms
+ POST /api/work-orders 201 in 13ms
+ ✓ Compiled /api/work-orders/[id] in 367ms (1023 modules)
+ GET /api/work-orders/wo-001 200 in 877ms
+ GET /api/work-orders/wo-999 404 in 17ms
+ PATCH /api/work-orders/wo-004 200 in 23ms
+ PATCH /api/work-orders/wo-004 400 in 12ms
+ PATCH /api/work-orders/wo-004 400 in 19ms
+ PATCH /api/work-orders/wo-004 422 in 20ms
+ DELETE /api/work-orders/wo-005 200 in 15ms
+ GET /api/work-orders/wo-005 404 in 12ms
+ GET /api/work-orders 200 in 14ms
+ ✓ Compiled in 278ms (391 modules)
+ ✓ Compiled in 161ms (391 modules)
+ GET /dashboard/work-orders 200 in 387ms
+ GET /dashboard/work-orders 200 in 41ms
+ ✓ Compiled in 131ms (391 modules)
+ GET /dashboard/work-orders 200 in 43ms
+ ○ Compiling /dashboard/properties ...
+ ✓ Compiled /dashboard/properties in 895ms (955 modules)
+ GET /dashboard/properties 200 in 1407ms
+ ✓ Compiled in 379ms (398 modules)
+ ✓ Compiled in 231ms (398 modules)
+ GET /dashboard/properties 200 in 237ms
+ GET /dashboard/properties 200 in 54ms
+ ✓ Compiled in 167ms (398 modules)
+ GET /dashboard/properties 200 in 38ms
+ ✓ Compiled in 116ms (398 modules)
+ GET /dashboard/properties 200 in 35ms
+ GET /dashboard/properties 200 in 130ms
+ ✓ Compiled in 297ms (955 modules)
+ GET /dashboard/properties 200 in 131ms
+ ✓ Compiled in 506ms (955 modules)
+ GET /dashboard/properties 200 in 118ms
+ ✓ Compiled in 197ms (398 modules)
+ GET /dashboard/properties 200 in 48ms
+ ✓ Compiled in 160ms (398 modules)
+ GET /dashboard/properties 200 in 39ms
+ GET /dashboard/properties 200 in 210ms
+ ✓ Compiled in 432ms (955 modules)
+ GET /dashboard/properties 200 in 201ms
+ ✓ Compiled in 150ms (398 modules)
+ GET /dashboard/properties 200 in 46ms
+ GET /dashboard/properties 200 in 250ms
+ ✓ Compiled in 393ms (955 modules)
+ GET /dashboard/properties 200 in 196ms
+ ✓ Compiled in 409ms (398 modules)
+ GET /dashboard/properties 200 in 40ms
+ ✓ Compiled in 178ms (398 modules)
+ GET /dashboard/properties 200 in 43ms
+ ✓ Compiled in 509ms (955 modules)
+ GET /dashboard/properties 200 in 659ms
+ GET /dashboard/properties 200 in 42ms
+ ○ Compiling /tech/today ...
+ ✓ Compiled /tech/today in 759ms (974 modules)
+ GET /tech/today 200 in 1165ms
+ ✓ Compiled /tech/job/[id] in 350ms (964 modules)
+ GET /tech/job/wo-001 200 in 5248ms
+ ✓ Compiled in 360ms (400 modules)
+ ✓ Compiled in 229ms (400 modules)
+ GET /tech/job/wo-001 200 in 247ms
+ GET /tech/job/wo-001 200 in 48ms
+ ✓ Compiled in 1375ms (995 modules)
+ GET /tech/job/wo-001 200 in 182ms
+ GET /tech/job/wo-001 200 in 264ms
+ GET /tech/job/wo-002 200 in 100ms
