@@ -21,7 +21,13 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
   const { id } = await params;
 
-  const visit = await getVisitById(id, tenantId);
+  let visit;
+  try {
+    visit = await getVisitById(id, tenantId);
+  } catch (err) {
+    console.error("[api] GET /api/visits/[id] failed:", err);
+    return NextResponse.json({ error: "Failed to load visit" }, { status: 500 });
+  }
   if (!visit) {
     return NextResponse.json({ error: `Visit "${id}" not found` }, { status: 404 });
   }
@@ -47,7 +53,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const { id } = await params;
 
-  const existingVisit = await getVisitById(id, tenantId);
+  let existingVisit;
+  try {
+    existingVisit = await getVisitById(id, tenantId);
+  } catch (err) {
+    console.error("[api] PATCH /api/visits/[id] pre-check failed:", err);
+    return NextResponse.json({ error: "Failed to load visit" }, { status: 500 });
+  }
   if (!existingVisit) {
     return NextResponse.json({ error: `Visit "${id}" not found` }, { status: 404 });
   }
@@ -71,7 +83,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     );
   }
 
-  const updateResult = await updateVisit(id, result.data, tenantId);
+  let updateResult;
+  try {
+    updateResult = await updateVisit(id, result.data, tenantId);
+  } catch (err) {
+    console.error("[api] PATCH /api/visits/[id] failed:", err);
+    return NextResponse.json({ error: "Failed to update visit" }, { status: 500 });
+  }
   if (!updateResult.ok) {
     return NextResponse.json({ error: `Visit "${id}" not found` }, { status: 404 });
   }

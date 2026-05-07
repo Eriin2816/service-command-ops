@@ -25,7 +25,13 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 
   const { id } = await params;
 
-  const workOrder = await getWorkOrderById(id, tenantId);
+  let workOrder;
+  try {
+    workOrder = await getWorkOrderById(id, tenantId);
+  } catch (err) {
+    console.error("[api] GET /api/work-orders/[id] failed:", err);
+    return NextResponse.json({ error: "Failed to load work order" }, { status: 500 });
+  }
   if (!workOrder) {
     return NextResponse.json({ error: `Work order "${id}" not found` }, { status: 404 });
   }
@@ -54,7 +60,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const { id } = await params;
 
-  const workOrder = await getWorkOrderById(id, tenantId);
+  let workOrder;
+  try {
+    workOrder = await getWorkOrderById(id, tenantId);
+  } catch (err) {
+    console.error("[api] PATCH /api/work-orders/[id] pre-check failed:", err);
+    return NextResponse.json({ error: "Failed to load work order" }, { status: 500 });
+  }
   if (!workOrder) {
     return NextResponse.json({ error: `Work order "${id}" not found` }, { status: 404 });
   }
@@ -74,7 +86,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     );
   }
 
-  const updateResult = await updateWorkOrder(id, result.data, tenantId);
+  let updateResult;
+  try {
+    updateResult = await updateWorkOrder(id, result.data, tenantId);
+  } catch (err) {
+    console.error("[api] PATCH /api/work-orders/[id] failed:", err);
+    return NextResponse.json({ error: "Failed to update work order" }, { status: 500 });
+  }
 
   if (!updateResult.ok) {
     if (updateResult.notFound) {
@@ -113,15 +131,26 @@ export async function DELETE(_request: NextRequest, { params }: RouteContext) {
 
   const { id } = await params;
 
-  const workOrder = await getWorkOrderById(id, tenantId);
+  let workOrder;
+  try {
+    workOrder = await getWorkOrderById(id, tenantId);
+  } catch (err) {
+    console.error("[api] DELETE /api/work-orders/[id] pre-check failed:", err);
+    return NextResponse.json({ error: "Failed to load work order" }, { status: 500 });
+  }
   if (!workOrder) {
     return NextResponse.json({ error: `Work order "${id}" not found` }, { status: 404 });
   }
 
-  const deleted = await deleteWorkOrder(id, tenantId);
+  let deleted;
+  try {
+    deleted = await deleteWorkOrder(id, tenantId);
+  } catch (err) {
+    console.error("[api] DELETE /api/work-orders/[id] failed:", err);
+    return NextResponse.json({ error: "Failed to delete work order" }, { status: 500 });
+  }
   if (!deleted) {
     return NextResponse.json({ error: `Work order "${id}" not found` }, { status: 404 });
   }
-
   return NextResponse.json({ data: { id, deleted: true } });
 }

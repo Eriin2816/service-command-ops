@@ -60,16 +60,20 @@ export async function GET(request: NextRequest) {
     ? auth.session.user.technician_id
     : (searchParams.get("technician_id") ?? undefined);
 
-  const visits = await listVisits({
-    tenant_id:        tenantId,
-    work_order_id:    workOrderId,
-    property_id:      propertyId,
-    technician_id:    technicianIdFilter,
-    status:           rawStatus as VisitStatus | undefined,
-    estimate_flagged: estimateFlaggedFilter,
-  });
-
-  return NextResponse.json({ data: visits, total: visits.length });
+  try {
+    const visits = await listVisits({
+      tenant_id:        tenantId,
+      work_order_id:    workOrderId,
+      property_id:      propertyId,
+      technician_id:    technicianIdFilter,
+      status:           rawStatus as VisitStatus | undefined,
+      estimate_flagged: estimateFlaggedFilter,
+    });
+    return NextResponse.json({ data: visits, total: visits.length });
+  } catch (err) {
+    console.error("[api] GET /api/visits failed:", err);
+    return NextResponse.json({ error: "Failed to load visits" }, { status: 500 });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +102,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const created = await createVisit(result.data, tenantId);
-  return NextResponse.json({ data: created }, { status: 201 });
+  try {
+    const created = await createVisit(result.data, tenantId);
+    return NextResponse.json({ data: created }, { status: 201 });
+  } catch (err) {
+    console.error("[api] POST /api/visits failed:", err);
+    return NextResponse.json({ error: "Failed to create visit" }, { status: 500 });
+  }
 }

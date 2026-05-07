@@ -65,7 +65,13 @@ export async function GET(): Promise<NextResponse> {
   const tenantId = getTenantId(auth.session);
   const today = new Date().toISOString().slice(0, 10);
 
-  const workOrders = await listWorkOrders({ tenant_id: tenantId });
+  let workOrders: Awaited<ReturnType<typeof listWorkOrders>>;
+  try {
+    workOrders = await listWorkOrders({ tenant_id: tenantId });
+  } catch (err) {
+    console.error("[api] GET /api/reports/summary failed:", err);
+    return NextResponse.json({ error: "Failed to load dashboard data" }, { status: 500 });
+  }
 
   let totalToday = 0;
   let completedToday = 0;

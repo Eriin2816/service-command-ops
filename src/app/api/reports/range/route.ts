@@ -98,7 +98,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "date_from must be ≤ date_to" }, { status: 400 });
   }
 
-  const all = await listWorkOrders({ tenant_id: tenantId });
+  let all: Awaited<ReturnType<typeof listWorkOrders>>;
+  try {
+    all = await listWorkOrders({ tenant_id: tenantId });
+  } catch (err) {
+    console.error("[api] GET /api/reports/range failed:", err);
+    return NextResponse.json({ error: "Failed to load report data" }, { status: 500 });
+  }
 
   const filtered =
     rawFrom && rawTo

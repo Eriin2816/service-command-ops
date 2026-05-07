@@ -45,14 +45,18 @@ export async function GET(request: NextRequest) {
     ? auth.session.user.technician_id
     : (searchParams.get("technician_id") ?? undefined);
 
-  const workOrders = await listWorkOrders({
-    tenant_id:     tenantId,
-    status:        rawStatus as WorkOrderStatus | undefined,
-    category:      rawCategory,
-    technician_id: technicianIdFilter,
-  });
-
-  return NextResponse.json({ data: workOrders, total: workOrders.length });
+  try {
+    const workOrders = await listWorkOrders({
+      tenant_id:     tenantId,
+      status:        rawStatus as WorkOrderStatus | undefined,
+      category:      rawCategory,
+      technician_id: technicianIdFilter,
+    });
+    return NextResponse.json({ data: workOrders, total: workOrders.length });
+  } catch (err) {
+    console.error("[api] GET /api/work-orders failed:", err);
+    return NextResponse.json({ error: "Failed to load work orders" }, { status: 500 });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +85,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const created = await createWorkOrder(result.data, tenantId);
-  return NextResponse.json({ data: created }, { status: 201 });
+  try {
+    const created = await createWorkOrder(result.data, tenantId);
+    return NextResponse.json({ data: created }, { status: 201 });
+  } catch (err) {
+    console.error("[api] POST /api/work-orders failed:", err);
+    return NextResponse.json({ error: "Failed to create work order" }, { status: 500 });
+  }
 }

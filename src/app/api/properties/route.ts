@@ -35,9 +35,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const properties = await listProperties({ tenant_id: tenantId, is_active: isActiveFilter });
-
-  return NextResponse.json({ data: properties, total: properties.length });
+  try {
+    const properties = await listProperties({ tenant_id: tenantId, is_active: isActiveFilter });
+    return NextResponse.json({ data: properties, total: properties.length });
+  } catch (err) {
+    console.error("[api] GET /api/properties failed:", err);
+    return NextResponse.json({ error: "Failed to load properties" }, { status: 500 });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +70,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const created = await createProperty(result.data, tenantId);
-  return NextResponse.json({ data: created }, { status: 201 });
+  try {
+    const created = await createProperty(result.data, tenantId);
+    return NextResponse.json({ data: created }, { status: 201 });
+  } catch (err) {
+    console.error("[api] POST /api/properties failed:", err);
+    return NextResponse.json({ error: "Failed to create property" }, { status: 500 });
+  }
 }

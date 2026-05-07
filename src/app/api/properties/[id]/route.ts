@@ -19,7 +19,13 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 
   const { id } = await params;
 
-  const property = await getPropertyById(id, tenantId);
+  let property;
+  try {
+    property = await getPropertyById(id, tenantId);
+  } catch (err) {
+    console.error("[api] GET /api/properties/[id] failed:", err);
+    return NextResponse.json({ error: "Failed to load property" }, { status: 500 });
+  }
   if (!property) {
     return NextResponse.json({ error: `Property "${id}" not found` }, { status: 404 });
   }
@@ -41,8 +47,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const { id } = await params;
 
-  if (!await getPropertyById(id, tenantId)) {
-    return NextResponse.json({ error: `Property "${id}" not found` }, { status: 404 });
+  try {
+    if (!await getPropertyById(id, tenantId)) {
+      return NextResponse.json({ error: `Property "${id}" not found` }, { status: 404 });
+    }
+  } catch (err) {
+    console.error("[api] PATCH /api/properties/[id] pre-check failed:", err);
+    return NextResponse.json({ error: "Failed to load property" }, { status: 500 });
   }
 
   let body: unknown;
@@ -60,7 +71,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     );
   }
 
-  const updateResult = await updateProperty(id, result.data, tenantId);
+  let updateResult;
+  try {
+    updateResult = await updateProperty(id, result.data, tenantId);
+  } catch (err) {
+    console.error("[api] PATCH /api/properties/[id] failed:", err);
+    return NextResponse.json({ error: "Failed to update property" }, { status: 500 });
+  }
 
   if (!updateResult.ok) {
     return NextResponse.json({ error: `Property "${id}" not found` }, { status: 404 });
