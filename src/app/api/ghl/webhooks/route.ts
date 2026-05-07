@@ -72,22 +72,17 @@ export async function POST(request: NextRequest) {
 
   // ── Log ────────────────────────────────────────────────────────────────────
   console.log(
-    "[ghl/webhooks] Received event | type=%s locationId=%s id=%s",
+    "[ghl/webhooks] Received event | type=%s locationId=%s",
     payload.type,
     payload.locationId,
-    "id" in payload ? payload.id : "(no id)"
   );
-  console.log("[ghl/webhooks] Raw payload:", rawBody);
 
   // ── Dispatch ───────────────────────────────────────────────────────────────
-  // Always return 200 after verification — processing errors must not cause
-  // GHL to retry (which would create duplicate work orders).
-  try {
-    dispatch(payload);
-  } catch (err) {
-    // Unexpected error in dispatch — log and swallow so GHL gets its 200.
+  // Fire-and-forget — always return 200 after verification so GHL doesn't retry.
+  // Processing errors are logged server-side; duplicates prevented by idempotency check.
+  void dispatch(payload).catch((err) => {
     console.error("[ghl/webhooks] Unhandled dispatch error:", err);
-  }
+  });
 
   return NextResponse.json({ received: true }, { status: 200 });
 }
@@ -96,10 +91,10 @@ export async function POST(request: NextRequest) {
 // Event dispatch
 // ---------------------------------------------------------------------------
 
-function dispatch(payload: GHLWebhookPayload): void {
+async function dispatch(payload: GHLWebhookPayload): Promise<void> {
   switch (payload.type) {
     case "OpportunityStatusChange": {
-      const result = createWorkOrderFromGHL(payload);
+      const result = await createWorkOrderFromGHL(payload);
       switch (result.outcome) {
         case "created":
           console.log(
@@ -131,11 +126,9 @@ function dispatch(payload: GHLWebhookPayload): void {
     case "OpportunityMonetaryValueUpdate":
     case "OpportunityDelete":
     case "AppointmentBooked":
-      console.log(`[ghl/webhooks] Event type "${payload.type}" received — not handled in Phase 1`);
       break;
 
     default: {
-      // TypeScript exhaustiveness guard — catches new event types added to GHLWebhookPayload.
       const unhandled: never = payload;
       console.warn("[ghl/webhooks] Unknown event type:", (unhandled as GHLWebhookPayload).type);
     }

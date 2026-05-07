@@ -1,30 +1,32 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { PatchVisitSchema } from "@/lib/validation/visit";
-import { getVisitById, updateVisit } from "@/lib/mock-data/visit-store";
+import { getVisitById, updateVisit } from "@/lib/db/queries/visits";
 import { WorkOrderStatus, EstimateHandoffStatus } from "@/types/work-order";
-import { updateWorkOrder } from "@/lib/mock-data/store";
+import { updateWorkOrder } from "@/lib/db/queries/work-orders";
 import { syncEstimateToGhl } from "@/lib/ghl/sync-estimate";
+import { requireApiAuth, isTechnicianScoped, getTenantId } from "@/lib/auth/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-// tenant_id is derived from session in production.
-// For mock phase, read from query param with fallback to placeholder.
-function resolveTenantId(request: NextRequest): string {
-  return request.nextUrl.searchParams.get("tenant_id") ?? "tenant-showtime";
-}
-
 // ---------------------------------------------------------------------------
 // GET /api/visits/[id]
-// Query params:
-//   tenant_id — string (defaults to "tenant-showtime")
+//
+// TECHNICIAN: allowed only if the visit belongs to them (technician_id match).
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const { id } = await params;
-  const tenantId = resolveTenantId(request);
+  const auth = await requireApiAuth();
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
 
-  const visit = getVisitById(id, tenantId);
+  const { id } = await params;
+
+  const visit = await getVisitById(id, tenantId);
   if (!visit) {
+    return NextResponse.json({ error: `Visit "${id}" not found` }, { status: 404 });
+  }
+
+  if (isTechnicianScoped(auth.session) && visit.technician_id !== auth.session.user.technician_id) {
     return NextResponse.json({ error: `Visit "${id}" not found` }, { status: 404 });
   }
 
@@ -33,18 +35,24 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
 // ---------------------------------------------------------------------------
 // PATCH /api/visits/[id]
-// Supports partial updates: status, checklist, technician_notes,
-// estimate_flagged, completed_at.
-// Immutable fields (id, tenant_id, work_order_id, property_id, created_at)
-// are never overwritten even if included in the body.
+//
+// TECHNICIAN: allowed only for their own visits (checklist, notes, estimate flag).
+// All store mutations receive tenantId for defense-in-depth.
 // ---------------------------------------------------------------------------
 
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
-  const { id } = await params;
-  const tenantId = resolveTenantId(request);
+  const auth = await requireApiAuth();
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
 
-  const existingVisit = getVisitById(id, tenantId);
+  const { id } = await params;
+
+  const existingVisit = await getVisitById(id, tenantId);
   if (!existingVisit) {
+    return NextResponse.json({ error: `Visit "${id}" not found` }, { status: 404 });
+  }
+
+  if (isTechnicianScoped(auth.session) && existingVisit.technician_id !== auth.session.user.technician_id) {
     return NextResponse.json({ error: `Visit "${id}" not found` }, { status: 404 });
   }
 
@@ -63,7 +71,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     );
   }
 
-  const updateResult = updateVisit(id, result.data, tenantId);
+  const updateResult = await updateVisit(id, result.data, tenantId);
   if (!updateResult.ok) {
     return NextResponse.json({ error: `Visit "${id}" not found` }, { status: 404 });
   }
@@ -71,15 +79,19 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   const updatedVisit = updateResult.data;
 
   // Detect estimate_flagged transition: false → true.
-  // Update work order status and fire-and-forget GHL task creation.
   const estimateFlaggedNow =
     !existingVisit.estimate_flagged && updatedVisit.estimate_flagged;
 
   if (estimateFlaggedNow) {
-    updateWorkOrder(updatedVisit.work_order_id, {
-      status: WorkOrderStatus.ESTIMATE_NEEDED,
-      estimate_handoff_status: EstimateHandoffStatus.FLAGGED,
-    });
+    // Pass tenantId so the work order update is tenant-scoped at the store level.
+    void updateWorkOrder(
+      updatedVisit.work_order_id,
+      {
+        status: WorkOrderStatus.ESTIMATE_NEEDED,
+        estimate_handoff_status: EstimateHandoffStatus.FLAGGED,
+      },
+      tenantId
+    );
     void syncEstimateToGhl(updatedVisit);
   }
 

@@ -4,21 +4,36 @@ import {
   getWorkOrderById,
   updateWorkOrder,
   deleteWorkOrder,
-} from "@/lib/mock-data/store";
+} from "@/lib/db/queries/work-orders";
 import { WorkOrderStatus } from "@/types/work-order";
 import { syncCompletionToGhl } from "@/lib/ghl/sync-completion";
+import { requireApiAuth, requirePermission, isTechnicianScoped, getTenantId } from "@/lib/auth/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 // ---------------------------------------------------------------------------
 // GET /api/work-orders/[id]
+//
+// TECHNICIAN: allowed only if the work order is assigned to them.
+// Post-fetch tenant check ensures cross-tenant ID guessing returns 404.
 // ---------------------------------------------------------------------------
 
 export async function GET(_request: NextRequest, { params }: RouteContext) {
+  const auth = await requireApiAuth();
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
+
   const { id } = await params;
 
-  const workOrder = getWorkOrderById(id);
+  const workOrder = await getWorkOrderById(id, tenantId);
   if (!workOrder) {
+    return NextResponse.json({ error: `Work order "${id}" not found` }, { status: 404 });
+  }
+
+  if (
+    isTechnicianScoped(auth.session) &&
+    workOrder.assigned_technician_id !== auth.session.user.technician_id
+  ) {
     return NextResponse.json({ error: `Work order "${id}" not found` }, { status: 404 });
   }
 
@@ -27,14 +42,20 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 
 // ---------------------------------------------------------------------------
 // PATCH /api/work-orders/[id]
-// Supports partial updates. Status changes are validated against the allowed
-// transition map — an invalid transition returns 422 with a clear error.
+//
+// TECHNICIAN: blocked (canViewAllWorkOrders: false for write access).
+// tenantId is passed to updateWorkOrder for defense-in-depth.
 // ---------------------------------------------------------------------------
 
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
+  const auth = await requirePermission("canViewAllWorkOrders");
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
+
   const { id } = await params;
 
-  if (!getWorkOrderById(id)) {
+  const workOrder = await getWorkOrderById(id, tenantId);
+  if (!workOrder) {
     return NextResponse.json({ error: `Work order "${id}" not found` }, { status: 404 });
   }
 
@@ -53,7 +74,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     );
   }
 
-  const updateResult = updateWorkOrder(id, result.data);
+  const updateResult = await updateWorkOrder(id, result.data, tenantId);
 
   if (!updateResult.ok) {
     if (updateResult.notFound) {
@@ -71,9 +92,6 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const updatedWo = updateResult.data;
 
-  // Fire-and-forget GHL sync on completion. Not awaited so the HTTP response
-  // is not held open waiting for an external API call. In a serverless
-  // deployment wrap this with waitUntil() to prevent premature context teardown.
   if (updatedWo.status === WorkOrderStatus.COMPLETED) {
     void syncCompletionToGhl(updatedWo);
   }
@@ -83,12 +101,24 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
 // ---------------------------------------------------------------------------
 // DELETE /api/work-orders/[id]
+//
+// TECHNICIAN / READ_ONLY_OWNER: blocked (canCreateWorkOrders: false).
+// tenantId is passed to deleteWorkOrder for defense-in-depth.
 // ---------------------------------------------------------------------------
 
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
+  const auth = await requirePermission("canCreateWorkOrders");
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
+
   const { id } = await params;
 
-  const deleted = deleteWorkOrder(id);
+  const workOrder = await getWorkOrderById(id, tenantId);
+  if (!workOrder) {
+    return NextResponse.json({ error: `Work order "${id}" not found` }, { status: 404 });
+  }
+
+  const deleted = await deleteWorkOrder(id, tenantId);
   if (!deleted) {
     return NextResponse.json({ error: `Work order "${id}" not found` }, { status: 404 });
   }

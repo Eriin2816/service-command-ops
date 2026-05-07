@@ -15,7 +15,6 @@ import {
   X,
   Info,
   Building2,
-  ChevronRight,
   Droplets,
   Filter as FilterIcon,
   Flame,

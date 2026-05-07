@@ -14,8 +14,8 @@
 import type { GHLOpportunityStatusChangePayload } from "@/types/ghl";
 import type { WorkOrderWithRelations } from "@/types/work-order";
 import { WorkOrderStatus } from "@/types/work-order";
-import { findByGhlOpportunityId, createWorkOrderFull } from "@/lib/mock-data/store";
-import { findPropertyByGhlContactId } from "@/lib/mock-data/property-store";
+import { findByGhlOpportunityId, createWorkOrderFull } from "@/lib/db/queries/work-orders";
+import { findPropertyByGhlContactId } from "@/lib/db/queries/properties";
 import { resolveTenantId, resolveGhlUserToTechId } from "./tenant-config";
 import {
   mapGhlStatus,
@@ -38,9 +38,9 @@ export type CreateWorkOrderFromGHLResult =
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
 
-export function createWorkOrderFromGHL(
+export async function createWorkOrderFromGHL(
   payload: GHLOpportunityStatusChangePayload
-): CreateWorkOrderFromGHLResult {
+): Promise<CreateWorkOrderFromGHLResult> {
   const tag = `[ghl/opportunity id=${payload.id}]`;
 
   // ── 1. Resolve tenant ──────────────────────────────────────────────────────
@@ -67,9 +67,6 @@ export function createWorkOrderFromGHL(
   // ── 3. Stage gate ──────────────────────────────────────────────────────────
   const stageName = payload.pipelineStage?.name;
   if (!isJobReadyStage(stageName, payload.status)) {
-    console.log(
-      `${tag} Stage "${stageName ?? "(none)"}" / status "${payload.status ?? "(none)"}" did not pass job-ready gate. Discarding.`
-    );
     return {
       outcome: "skipped",
       reason: `Stage "${stageName}" is not job-ready`,
@@ -77,9 +74,8 @@ export function createWorkOrderFromGHL(
   }
 
   // ── 4. Property lookup ─────────────────────────────────────────────────────
-  const property = findPropertyByGhlContactId(contactId, tenantId);
+  const property = await findPropertyByGhlContactId(contactId, tenantId);
   if (!property) {
-    // Contact webhook may not have arrived yet — in production, queue for retry.
     console.warn(
       `${tag} No Property found for ghl_contact_id="${contactId}" tenant="${tenantId}". ` +
       `Contact webhook may still be in flight. Discarding (queue retry in production).`
@@ -88,39 +84,24 @@ export function createWorkOrderFromGHL(
   }
 
   // ── 5. Idempotency check ───────────────────────────────────────────────────
-  const existing = findByGhlOpportunityId(payload.id, tenantId);
+  const existing = await findByGhlOpportunityId(payload.id, tenantId);
   if (existing) {
-    console.log(
-      `${tag} WorkOrder "${existing.id}" already exists for this opportunity. Skipping create.`
-    );
     return { outcome: "already_exists", workOrder: existing };
   }
 
   // ── 6. Map fields ──────────────────────────────────────────────────────────
 
-  // Title — trim, max 200 chars, fall back to a generated label
   const rawTitle = payload.name?.trim().slice(0, 200);
   const title = rawTitle || `GHL Job — ${property.customer_name}`;
-
-  // Description — preserve as-is; do not truncate (tech notes live here later)
   const description = payload.notes?.trim().slice(0, 5000) || undefined;
 
-  // Status
   const status = mapGhlStatus(payload.status, stageName);
 
-  // Service category — custom field takes precedence over stage name
   const cfServiceCat = extractOppCustomField(payload.customFields, "GHL_CF_OPP_SERVICE_CAT");
   const serviceCategory =
     mapServiceCategoryFromCustomField(cfServiceCat) ??
     mapServiceCategoryFromStageName(stageName);
 
-  if (serviceCategory === undefined) {
-    // mapServiceCategoryFromStageName always returns a value so this branch is unreachable,
-    // but TypeScript guard for safety.
-    console.warn(`${tag} Could not resolve service category; defaulting to OTHER.`);
-  }
-
-  // Scheduled date and time
   const rawDate  = extractOppCustomField(payload.customFields, "GHL_CF_OPP_SCHEDULED_DATE");
   const rawStart = extractOppCustomField(payload.customFields, "GHL_CF_OPP_TIME_START");
   const rawEnd   = extractOppCustomField(payload.customFields, "GHL_CF_OPP_TIME_END");
@@ -129,30 +110,11 @@ export function createWorkOrderFromGHL(
   const scheduledTimeStart = parseGhlTime(rawStart);
   const scheduledTimeEnd   = parseGhlTime(rawEnd);
 
-  if (rawDate && !scheduledDate) {
-    console.warn(`${tag} Scheduled date "${rawDate}" failed format check (expected YYYY-MM-DD). Field omitted.`);
-  }
-  if (rawStart && !scheduledTimeStart) {
-    console.warn(`${tag} Start time "${rawStart}" failed format check (expected HH:MM). Field omitted.`);
-  }
-  if (rawEnd && !scheduledTimeEnd) {
-    console.warn(`${tag} End time "${rawEnd}" failed format check (expected HH:MM). Field omitted.`);
-  }
-
-  // Priority
   const rawPriority = extractOppCustomField(payload.customFields, "GHL_CF_OPP_PRIORITY");
   const priority = mapGhlPriority(rawPriority);
 
-  // Technician
   const techId = resolveGhlUserToTechId(payload.assignedTo);
-  if (payload.assignedTo && !techId) {
-    console.warn(
-      `${tag} GHL user "${payload.assignedTo}" not in GHL_USER_TO_TECHNICIAN map. ` +
-      `assigned_technician_id will be undefined.`
-    );
-  }
 
-  // completed_at — only set when mapping to COMPLETED
   const completedAt = status === WorkOrderStatus.COMPLETED ? new Date().toISOString() : undefined;
 
   // ── 7. Create ──────────────────────────────────────────────────────────────
@@ -164,7 +126,7 @@ export function createWorkOrderFromGHL(
     .filter(Boolean)
     .join(", ");
 
-  const workOrder = createWorkOrderFull(
+  const workOrder = await createWorkOrderFull(
     {
       tenant_id:              tenantId,
       property_id:            property.id,

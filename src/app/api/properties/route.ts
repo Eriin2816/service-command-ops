@@ -1,21 +1,26 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { CreatePropertySchema } from "@/lib/validation/property";
-import { listProperties, createProperty } from "@/lib/mock-data/property-store";
+import { listProperties, createProperty } from "@/lib/db/queries/properties";
+import { requirePermission, getTenantId } from "@/lib/auth/api-auth";
 
 // ---------------------------------------------------------------------------
 // GET /api/properties
+//
+// TECHNICIAN: blocked (canViewAllProperties: false).
+// READ_ONLY_OWNER: allowed.
+//
 // Query params:
-//   is_active  — "true" | "false" — filter by active status
-//   tenant_id  — placeholder; production will derive from session
+//   is_active — "true" | "false"
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
+  const auth = await requirePermission("canViewAllProperties");
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
+
   const { searchParams } = request.nextUrl;
-
   const rawIsActive = searchParams.get("is_active") ?? undefined;
-  const tenantId    = searchParams.get("tenant_id") ?? undefined;
 
-  // Validate is_active param
   let isActiveFilter: boolean | undefined;
   if (rawIsActive !== undefined) {
     if (rawIsActive === "true") {
@@ -30,18 +35,22 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const properties = listProperties({ tenant_id: tenantId, is_active: isActiveFilter });
+  const properties = await listProperties({ tenant_id: tenantId, is_active: isActiveFilter });
 
   return NextResponse.json({ data: properties, total: properties.length });
 }
 
 // ---------------------------------------------------------------------------
 // POST /api/properties
-// Body: CreatePropertyInput (validated via Zod)
-// tenant_id is taken from session in production; hardcoded for mock phase.
+//
+// TECHNICIAN / READ_ONLY_OWNER: blocked (canEditProperties: false).
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission("canEditProperties");
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
+
   let body: unknown;
   try {
     body = await request.json();
@@ -57,6 +66,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const created = createProperty(result.data);
+  const created = await createProperty(result.data, tenantId);
   return NextResponse.json({ data: created }, { status: 201 });
 }

@@ -1,24 +1,31 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { WorkOrderStatus, ServiceCategory } from "@/types/work-order";
 import { NewWorkOrderSchema } from "@/lib/validation/work-order";
-import { listWorkOrders, createWorkOrder } from "@/lib/mock-data/store";
+import { listWorkOrders, createWorkOrder } from "@/lib/db/queries/work-orders";
+import { requireApiAuth, requirePermission, isTechnicianScoped, getTenantId } from "@/lib/auth/api-auth";
 
 // ---------------------------------------------------------------------------
 // GET /api/work-orders
+//
+// TENANT_ADMIN / OFFICE_STAFF / READ_ONLY_OWNER: full list, optional filters.
+// TECHNICIAN: automatically scoped to their assigned_technician_id.
+//
 // Query params:
-//   status     — filter by WorkOrderStatus enum value
-//   category   — filter by ServiceCategory enum value
-//   tenant_id  — placeholder; production will derive from session
+//   status        — WorkOrderStatus enum value
+//   category      — ServiceCategory enum value
+//   technician_id — filter by tech (ignored/overridden for TECHNICIAN role)
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
+  const auth = await requireApiAuth();
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
+
   const { searchParams } = request.nextUrl;
 
-  const rawStatus = searchParams.get("status") ?? undefined;
+  const rawStatus   = searchParams.get("status")   ?? undefined;
   const rawCategory = searchParams.get("category") ?? undefined;
-  const tenantId = searchParams.get("tenant_id") ?? undefined;
 
-  // Validate status param
   if (rawStatus !== undefined && !Object.values(WorkOrderStatus).includes(rawStatus as WorkOrderStatus)) {
     return NextResponse.json(
       { error: `Invalid status value: "${rawStatus}"`, allowed: Object.values(WorkOrderStatus) },
@@ -26,7 +33,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Validate category param
   if (rawCategory !== undefined && !Object.values(ServiceCategory).includes(rawCategory as ServiceCategory)) {
     return NextResponse.json(
       { error: `Invalid category value: "${rawCategory}"`, allowed: Object.values(ServiceCategory) },
@@ -34,10 +40,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const workOrders = listWorkOrders({
-    tenant_id: tenantId,
-    status: rawStatus as WorkOrderStatus | undefined,
-    category: rawCategory,
+  // Technicians can only see work orders assigned to them.
+  const technicianIdFilter = isTechnicianScoped(auth.session)
+    ? auth.session.user.technician_id
+    : (searchParams.get("technician_id") ?? undefined);
+
+  const workOrders = await listWorkOrders({
+    tenant_id:     tenantId,
+    status:        rawStatus as WorkOrderStatus | undefined,
+    category:      rawCategory,
+    technician_id: technicianIdFilter,
   });
 
   return NextResponse.json({ data: workOrders, total: workOrders.length });
@@ -45,11 +57,15 @@ export async function GET(request: NextRequest) {
 
 // ---------------------------------------------------------------------------
 // POST /api/work-orders
-// Body: NewWorkOrderInput (validated via Zod)
-// tenant_id is taken from session in production; hardcoded for mock phase.
+//
+// TECHNICIAN: blocked (canCreateWorkOrders: false).
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
+  const auth = await requirePermission("canCreateWorkOrders");
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
+
   let body: unknown;
   try {
     body = await request.json();
@@ -65,6 +81,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const created = createWorkOrder(result.data);
+  const created = await createWorkOrder(result.data, tenantId);
   return NextResponse.json({ data: created }, { status: 201 });
 }

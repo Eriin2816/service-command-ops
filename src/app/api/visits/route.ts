@@ -1,31 +1,35 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { CreateVisitSchema } from "@/lib/validation/visit";
-import { listVisits, createVisit } from "@/lib/mock-data/visit-store";
+import { listVisits, createVisit } from "@/lib/db/queries/visits";
 import { VisitStatus } from "@/types/visit";
+import { requireApiAuth, isTechnicianScoped, getTenantId } from "@/lib/auth/api-auth";
 
 // ---------------------------------------------------------------------------
 // GET /api/visits
+//
+// TENANT_ADMIN / OFFICE_STAFF: full list, all filters available.
+// TECHNICIAN: automatically scoped to their technician_id.
+//
 // Query params:
-//   tenant_id        — string  (defaults to "tenant-showtime")
-//   work_order_id    — string  filter by work order
-//   property_id      — string  filter by property
-//   technician_id    — string  filter by assigned tech
+//   work_order_id    — filter by work order
+//   property_id      — filter by property
+//   technician_id    — filter by assigned tech (ignored/overridden for TECHNICIAN role)
 //   status           — VisitStatus enum value
 //   estimate_flagged — "true" | "false"
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest) {
+  const auth = await requireApiAuth();
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
+
   const { searchParams } = request.nextUrl;
 
-  const tenantId       = searchParams.get("tenant_id")      ?? undefined;
-  const workOrderId    = searchParams.get("work_order_id")   ?? undefined;
-  const propertyId     = searchParams.get("property_id")     ?? undefined;
-  const technicianId   = searchParams.get("technician_id")   ?? undefined;
-  const rawStatus      = searchParams.get("status")          ?? undefined;
-  const rawEstimate    = searchParams.get("estimate_flagged") ?? undefined;
+  const workOrderId = searchParams.get("work_order_id") ?? undefined;
+  const propertyId  = searchParams.get("property_id")   ?? undefined;
+  const rawStatus   = searchParams.get("status")        ?? undefined;
+  const rawEstimate = searchParams.get("estimate_flagged") ?? undefined;
 
-  // Validate status param
-  let statusFilter: VisitStatus | undefined;
   if (rawStatus !== undefined) {
     if (!Object.values(VisitStatus).includes(rawStatus as VisitStatus)) {
       return NextResponse.json(
@@ -35,10 +39,8 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-    statusFilter = rawStatus as VisitStatus;
   }
 
-  // Validate estimate_flagged param
   let estimateFlaggedFilter: boolean | undefined;
   if (rawEstimate !== undefined) {
     if (rawEstimate === "true") {
@@ -53,12 +55,17 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const visits = listVisits({
-    tenant_id:       tenantId,
-    work_order_id:   workOrderId,
-    property_id:     propertyId,
-    technician_id:   technicianId,
-    status:          statusFilter,
+  // Technicians can only list their own visits.
+  const technicianIdFilter = isTechnicianScoped(auth.session)
+    ? auth.session.user.technician_id
+    : (searchParams.get("technician_id") ?? undefined);
+
+  const visits = await listVisits({
+    tenant_id:        tenantId,
+    work_order_id:    workOrderId,
+    property_id:      propertyId,
+    technician_id:    technicianIdFilter,
+    status:           rawStatus as VisitStatus | undefined,
     estimate_flagged: estimateFlaggedFilter,
   });
 
@@ -67,11 +74,15 @@ export async function GET(request: NextRequest) {
 
 // ---------------------------------------------------------------------------
 // POST /api/visits
-// Body: CreateVisitInput (validated via Zod)
-// tenant_id is taken from session in production; hardcoded for mock phase.
+//
+// All authenticated roles allowed — technicians create visits via mobile flow.
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
+  const auth = await requireApiAuth();
+  if (!auth.ok) return auth.response;
+  const tenantId = getTenantId(auth.session);
+
   let body: unknown;
   try {
     body = await request.json();
@@ -87,6 +98,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const created = createVisit(result.data);
+  const created = await createVisit(result.data, tenantId);
   return NextResponse.json({ data: created }, { status: 201 });
 }

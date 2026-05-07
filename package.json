@@ -13,10 +13,12 @@
     "zip:scaffold": "bash scripts/create-zip.sh"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",
     "next": "^15.0.0",
+    "next-auth": "^4.24.14",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "tailwind-merge": "^3.5.0",

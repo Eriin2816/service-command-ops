@@ -1,6 +1,6 @@
 # MEMORY.md — ServiceOps Command Center
 
-_Last updated: estimate-flagged → GHL task sync wired to visits PATCH (2026-05-05)._
+_Last updated: Phase 8 complete — auth + role enforcement + tenant isolation audit + store hardening (2026-05-06)._
 
 ## Product Identity
 - **Name**: ServiceOps Command Center
@@ -20,8 +20,9 @@ _Last updated: estimate-flagged → GHL task sync wired to visits PATCH (2026-05
 | 4 | Technician Mobile View (full) | ✅ Done (today list + job detail + checklist + visits API + completion flow) |
 | 5 | GHL Webhook Intake | 🔄 In Progress (mapping docs ✅, HMAC verification ✅, OpportunityStatusChange processing ✅, QA script ✅) |
 | 6 | Status Sync Back to GHL | 🔄 In Progress (GHL client ✅, completion sync ✅, retry queue placeholder ✅, estimate task sync ✅) |
-| 7 | Reporting Dashboard | ⏳ Pending |
-| 8 | QA and Launch | ⏳ Pending |
+| 7 | Reporting Dashboard | 🔄 In Progress (overview dashboard ✅, reports page ✅, /api/reports/summary ✅, /api/reports/range ✅) |
+| 8 | Authentication | 🔄 In Progress (NextAuth CredentialsProvider ✅, middleware ✅, /login page ✅, session in JWT ✅, role permissions on all API routes ✅, tenant isolation audit ✅) |
+| 9 | QA and Launch | ⏳ Pending |
 
 ## Confirmed Decisions (Phase 4 — Tech Mobile)
 - **Tech today page uses real types**: `WorkOrderWithRelations` from `@/types/work-order` — no local placeholder types. 3 jobs (wo-001, wo-002, wo-003) sorted by `scheduled_time_start`.
@@ -54,7 +55,7 @@ _Last updated: estimate-flagged → GHL task sync wired to visits PATCH (2026-05
 - **Class utility**: `cn()` from `clsx` + `tailwind-merge` — lives in `src/lib/utils/index.ts`
 - **Fonts**: `Sora` (display/headings) + `Plus Jakarta Sans` (body) via `next/font/google`
 - **Database**: Placeholder — Supabase/PostgreSQL planned, not wired yet
-- **Auth**: Placeholder — no real auth in Phase 1–4, role hardcoded as TENANT_ADMIN
+- **Auth**: NextAuth.js v4 — CredentialsProvider, JWT strategy, 8-hour maxAge. `src/lib/auth/config.ts`. Session carries `id`, `role`, `tenant_id`, `technician_id?`. Role permissions enforced via `requirePermission(flag)` in `api-auth.ts`.
 
 ## Brand / Design Tokens (Established Phase 1)
 - **Sidebar bg**: `#0C1E2E` (deep ocean navy)
@@ -123,6 +124,13 @@ _Last updated: estimate-flagged → GHL task sync wired to visits PATCH (2026-05
 - `PropertyDetail.tsx` — `'use client'`; per-section inline edit; equipment sub-forms; gate code amber badge
 - `NewPropertyModal.tsx` — `'use client'`; slide-over drawer; 9 fields; POSTs to `/api/properties`; success screen auto-closes
 - `NewPropertyButton.tsx` — `'use client'`; owns modal open state + 6s success banner with customer name
+- `OverviewDashboard.tsx` — `'use client'`; fetches `/api/reports/summary` + `/api/work-orders` in parallel; KPI cards, today's schedule (first 5, time-sorted), status breakdown bars (scaleX animation), overdue alert list; full loading skeletons throughout
+- `ReportsDashboard.tsx` — `'use client'`; date range picker (This Week / This Month / Custom); fetches `/api/reports/range`; summary strip, status breakdown table, category breakdown table, technician completion summary table; print-optimized layout with print-only report header
+
+### Auth / Provider Components
+- `src/components/providers/SessionProvider.tsx` — `'use client'` wrapper around `next-auth/react` SessionProvider; mounted in root layout so `useSession()` works everywhere
+- `src/app/login/LoginForm.tsx` — `'use client'`; split-screen login; `signIn("credentials", { redirect: false })`; auto-fills from demo credential buttons; redirects to `callbackUrl` or role-appropriate home on success
+- `src/lib/auth/tenant.ts` — `getTenantId(session)` helper; throws if `tenant_id` absent; re-exported from `api-auth.ts` and `index.ts`
 
 ### Tech Mobile Components — `src/components/tech/`
 - `JobDetail.tsx` — `'use client'`; full state machine (6 phases); PATCHes `/api/visits/[id]`; 3 fixed section types: Access card (amber), Checklist (interactive, progress bar), Notes + Photos placeholders; sticky action bar; bottom sheet for estimate prompt; two full-page completion screens.
@@ -131,10 +139,12 @@ _Last updated: estimate-flagged → GHL task sync wired to visits PATCH (2026-05
 ```
 src/app/
   page.tsx                         → redirect to /dashboard/overview
+  login/page.tsx                   → ✅ server wrapper → LoginForm client component
+  login/LoginForm.tsx              → ✅ split-screen login form (client)
   layout.tsx                       → root layout, fonts
   dashboard/
     layout.tsx                     → DashboardShell
-    overview/page.tsx              → KPI cards + today's jobs + alerts + tech status
+    overview/page.tsx              → ✅ server wrapper → OverviewDashboard client component
     work-orders/page.tsx           → ✅ work order table with filters + mock data
     work-orders/[id]/page.tsx      → ✅ detail — all fields, status, estimate flag, handoff
     properties/page.tsx            → ✅ properties table — search + active filter + 5 mock properties
@@ -142,7 +152,7 @@ src/app/
     technicians/page.tsx           → empty state
     visits/page.tsx                → empty state
     estimates/page.tsx             → empty state
-    reports/page.tsx               → empty state
+    reports/page.tsx               → ✅ server wrapper → ReportsDashboard client component
     settings/page.tsx              → 5 setting categories, all "Coming Soon"
   api/
     work-orders/route.ts           → ✅ GET (status/category/tenant_id filter) + POST
@@ -151,7 +161,10 @@ src/app/
     properties/[id]/route.ts       → ✅ GET + PATCH (Zod, tenant-scoped)
     visits/route.ts                → ✅ GET (6 filters) + POST (Zod) — Phase 4
     visits/[id]/route.ts           → ✅ GET + PATCH (Zod, tenant-scoped) — Phase 4
+    reports/summary/route.ts       → ✅ GET — today KPIs + by_status + by_category counts (tenant_id required)
+    reports/range/route.ts         → ✅ GET — date-filtered status/category/technician breakdown (date_from + date_to)
     ghl/webhooks/route.ts          → ✅ HMAC verification + dispatch + OpportunityStatusChange processing
+    auth/[...nextauth]/route.ts    → ✅ NextAuth handler (GET + POST)
   tech/
     layout.tsx                     → TechShell
     today/page.tsx                 → ✅ 3 real WO job cards (wo-001, wo-002, wo-003), sorted by time
@@ -180,6 +193,40 @@ src/app/
 - **No retry queue for estimate tasks**: unlike completion sync, estimate task failures are not enqueued. `estimate_handoff_status` stays `FLAGGED` — visible in dashboard — which naturally prompts office staff to retry manually or the next sync will re-attempt on a future trigger.
 - **`GHL_DEFAULT_OFFICE_USER_ID` env var**: new env var expected by `sync-estimate.ts`. Should be documented in `.env.example`.
 
+## Confirmed Decisions (Phase 7 — Reporting Dashboard)
+
+### Overview Dashboard (`/dashboard/overview`)
+- **Architecture**: server `page.tsx` (metadata + breadcrumb) → `OverviewDashboard` client component. Fetches summary + work orders in parallel via `Promise.all`.
+- **Today's schedule**: filters by `scheduled_date === today` (UTC ISO), sorts by `scheduled_time_start` (unscheduled sorted last via `"99:99"` sentinel), capped at 5 rows. "View all N jobs" link appears when total > 5.
+- **Overdue list**: `scheduled_date < today && status not in {COMPLETED, CANCELLED}`. Shows `Xd ago` badge computed client-side.
+- **Status breakdown bars**: `scaleX()` transform (not width) animated via double-rAF after data loads — respects "only animate transform/opacity" guideline. All 7 statuses shown in operational priority order.
+- **Greeting**: time-of-day aware (`Good morning/afternoon/evening`) computed client-side on render.
+- **Completion rate trend**: shows `X% of today's jobs` on the Completed card; falls back to `"No jobs today"` when `total_today === 0` to avoid division by zero.
+- **Skeleton pattern**: all 4 sections have `Bone` (`animate-pulse rounded-md bg-slate-100`) placeholders matching the exact dimensions of loaded content.
+
+### Reports Page (`/dashboard/reports`)
+- **Date range picker**: segmented control (This Week | This Month | Custom). This Week = Monday→today (ISO week, Monday start). This Month = 1st of month→today. Custom shows two `<input type="date">` with `min`/`max` guards; re-fetches on valid change. Defaults to This Month on mount.
+- **`/api/reports/range` endpoint**: accepts `tenant_id` (required) + `date_from`/`date_to` (must both be provided or both omitted; validated as YYYY-MM-DD; `from ≤ to` enforced). Filters by `scheduled_date` in range. Returns `by_status` (all 7, zero-filled, sorted by count desc), `by_category` (non-zero only), `by_technician` (derived from WO fields, grouped by `assigned_technician_id`, "Unassigned" for null).
+- **Technician aggregation**: `pending` = all active statuses (new, assigned, in_progress, estimate_needed, needs_follow_up). `completion_rate` = `Math.round(completed/total * 100)`. Sorted by completed desc, then total desc.
+- **Status table display**: zero-count rows rendered at `opacity-40` below non-zero rows. Total row appended as a footer.
+- **Category completion rate coloring**: green ≥75%, amber ≥50%, red <50%. 100% shows a `CheckCircle2` icon.
+- **Technician avatar**: initials badge with palette color derived from `name.charCodeAt` sum mod 6 — deterministic, consistent across renders.
+- **Print layout**: `@media print { @page { margin: 1.5cm; size: A4 portrait } }`. Controls bar + page header are `print:hidden`. Print-only header block (`hidden print:block`) shows company name, report title, date range, generated timestamp. Cards lose `shadow`/`rounded`. Mini-bars get `print:border` so they're visible on greyscale. `page-break-inside: avoid` on tables via injected `<style>` tag.
+- **Mini-bars**: fixed 80px track (status table) or 96px track (tech table). Uses direct `width` style (not scaleX) since these are data visualizations inside table cells, not UI animations.
+- **Refresh button**: re-fetches current range; shows `animate-spin` on icon while loading; disabled while loading.
+
+## Reporting API (`src/app/api/reports/`)
+
+### `GET /api/reports/summary`
+- `tenant_id` required (400 if absent).
+- Returns: `total_work_orders`, `total_today`, `completed_today`, `open_estimates` (handoff status FLAGGED/SENT_TO_GHL/ESTIMATE_SENT), `overdue` (past scheduled_date + not COMPLETED/CANCELLED), `by_status` (all 7 zero-filled), `by_category` (all 10 zero-filled).
+- No date filter — always reflects full tenant history.
+
+### `GET /api/reports/range`
+- `tenant_id` required. `date_from` + `date_to` must be provided as a pair (YYYY-MM-DD). Returns 400 if only one is present or if `from > to`.
+- Returns: `total_in_range`, `completed_in_range`, `completion_rate`, `by_status[]` (StatusRow), `by_category[]` (CategoryRow with `completed` + `completion_rate`), `by_technician[]` (TechRow with `pending` + `cancelled`).
+- Exported types: `RangeReport`, `StatusRow`, `CategoryRow`, `TechRow` — imported by `ReportsDashboard.tsx` for type safety.
+
 ## GHL Client (`src/lib/ghl/client.ts`)
 - **Auth**: `Authorization: Bearer <token>` + `Version: 2021-07-28` (required by GHL API v2) on every request.
 - **`GHL_PRIVATE_INTEGRATION_TOKEN` missing**: immediate `{ ok: false }` result, no fetch attempted, `retriesUsed: 0`.
@@ -187,7 +234,7 @@ src/app/
 - **204 No Content**: treated as success with `data: null` — calling `res.json()` on an empty body would throw.
 - **Error extraction**: tries `json.message` → `json.msg` → `json.error` → raw text, in order. GHL uses different field names across endpoints.
 - **`updateOpportunity(id, data)`**: `PUT /opportunities/{id}`. Used by completion sync with `{ status: "won" }`.
-- **`createTask(id, taskData)`**: `POST /opportunities/{id}/tasks`. Used by estimate-flagged flow (not yet wired).
+- **`createTask(id, taskData)`**: `POST /opportunities/{id}/tasks`. Used by estimate-flagged flow (`sync-estimate.ts`).
 - **`ghlFetch<T>(method, path, body?)`**: exported for future endpoints without needing new module exports.
 
 ## GHL Processing Layer (`src/lib/ghl/`)
@@ -230,10 +277,10 @@ src/app/
 - **Estimate notes**: stored separately in `estimateNotes` state, combined with `notes` on submit: `[notes, estimateNotes].filter(Boolean).join("\n\n---\n\nEstimate notes:\n")`.
 
 ## Visits API Layer (`src/app/api/visits/`)
-- **GET `/api/visits`**: query params: `tenant_id` (defaults to "tenant-showtime"), `work_order_id`, `property_id`, `technician_id`, `status` (validated against `VisitStatus` enum), `estimate_flagged` ("true"/"false"). Returns `{ data: Visit[], total: number }`.
-- **POST `/api/visits`**: Zod `CreateVisitSchema` — required: `work_order_id`, `property_id`, `scheduled_date` (YYYY-MM-DD). Defaults: `status = scheduled`, `checklist = []`, `photo_urls = []`, `estimate_flagged = false`. Returns 201.
-- **GET `/api/visits/[id]`**: resolves `tenant_id` from `?tenant_id=` param (defaults to "tenant-showtime"). Returns 404 if wrong tenant.
-- **PATCH `/api/visits/[id]`**: same tenant resolution. `PatchVisitSchema` — all optional: `status`, `checklist` (array of ChecklistItem), `technician_notes`, `estimate_flagged`, `completed_at`. Immutable fields (id, tenant_id, work_order_id, property_id) never overwritten. On `estimate_flagged` false→true: synchronously sets work order `status → ESTIMATE_NEEDED` + `estimate_handoff_status → FLAGGED`, then fire-and-forgets `syncEstimateToGhl(visit)`. Returns 200.
+- **GET `/api/visits`**: session-auth required (`requireApiAuth`). Tenant derived from `getTenantId(auth.session)`. Query params: `work_order_id`, `property_id`, `technician_id`, `status` (validated against `VisitStatus` enum), `estimate_flagged` ("true"/"false"). TECHNICIAN role auto-scoped to their `technician_id`. Returns `{ data: Visit[], total: number }`.
+- **POST `/api/visits`**: requires `canCreateWorkOrders` permission. Tenant from session. Zod `CreateVisitSchema` — required: `work_order_id`, `property_id`, `scheduled_date` (YYYY-MM-DD). Defaults: `status = scheduled`, `checklist = []`, `photo_urls = []`, `estimate_flagged = false`. Returns 201.
+- **GET `/api/visits/[id]`**: session-auth required. Tenant from `getTenantId(auth.session)`. Returns 404 if wrong tenant.
+- **PATCH `/api/visits/[id]`**: session-auth required. Tenant from `getTenantId(auth.session)`. `PatchVisitSchema` — all optional: `status`, `checklist` (array of ChecklistItem), `technician_notes`, `estimate_flagged`, `completed_at`. Immutable fields (id, tenant_id, work_order_id, property_id) never overwritten. On `estimate_flagged` false→true: synchronously sets work order `status → ESTIMATE_NEEDED` + `estimate_handoff_status → FLAGGED` (with `tenantId`), then fire-and-forgets `syncEstimateToGhl(visit)`. Returns 200.
 - **`resolveTenantId(request)`** helper in `[id]/route.ts`: reads `?tenant_id=` or defaults — same pattern across all [id] routes.
 
 ## Visit Store (`src/lib/mock-data/visit-store.ts`)
@@ -293,9 +340,11 @@ src/app/
 - `usePathname()` for active nav detection — always in `'use client'` components
 - Dashboard pages: `export const metadata: Metadata = { title: "Page Name" }` for tab titles
 - **Detail page params**: Next.js 15 — `params` is `Promise<{ id: string }>`, must `await params`. Both `generateMetadata` and page function await it independently.
-- **Tenant resolution in API routes**: `request.nextUrl.searchParams.get("tenant_id") ?? "tenant-showtime"` — all [id] routes use a `resolveTenantId(request)` helper.
+- **Tenant resolution in API routes**: `getTenantId(auth.session)` — called immediately after auth in every route. The helper throws if `tenant_id` is missing. Never use `session.user.tenant_id` directly. The old `resolveTenantId(request)` (query-param-based) pattern is retired.
 - **Response shape convention**: `{ data: T }` success; `{ error, issues? }` validation failure; `{ error }` 404/400. Consistent across all API routes.
 - **globalThis pattern for shared in-memory state**: use `(globalThis as any).__storeName` to share mutable state across Next.js dev mode module instances. Required for stores that start empty and are populated server-side then read by API routes.
+- **Tenant isolation pattern**: every API route calls `getTenantId(auth.session)` immediately after auth, then passes the result to every store function. Never use `session.user.tenant_id` directly — the helper throws on missing value. Never rely on store defaults (`"tenant-showtime"`) in API routes.
+- **Store mutation tenant scoping**: `updateWorkOrder(id, patch, tenantId?)` and `deleteWorkOrder(id, tenantId?)` accept optional `tenantId`; when provided, `findIndex` also matches `tenant_id`. Pass it from all API routes. GHL sync paths omit it (they hold already-verified WO objects).
 - **Zod schema location**: `src/lib/validation/` — one file per domain. Schemas named `Create*Schema` + `Patch*Schema`. Types inferred with `z.infer<>`.
 - **Filter controls pattern** (Phase 2+): `'use client'` wrapper component holds filter state; receives full data array as prop from server page.
 - **shadcn/ui Table**: `Table, TableHeader, TableBody, TableRow, TableHead, TableCell` from `@/components/ui/table`.
@@ -333,6 +382,44 @@ ServiceOps handles: work orders, visits, property profiles, technician workflow,
 - `next` 15, `react` 18, `typescript` 5, `tailwindcss` 3.4
 - `lucide-react`, `clsx`, `tailwind-merge`, `class-variance-authority`
 - `zod` (v4)
+- `next-auth` (v4) — CredentialsProvider, JWT sessions
+
+## Confirmed Decisions (Phase 8 — Tenant Isolation Audit)
+
+### getTenantId helper
+- **File**: `src/lib/auth/tenant.ts` — `getTenantId(session: Session): string`
+- **Rule**: Every API route calls `getTenantId(auth.session)` immediately after auth. Never access `session.user.tenant_id` directly — the helper throws if missing (prevents silent wrong-tenant fallback).
+- **Re-exported** from `src/lib/auth/api-auth` (for routes) and `src/lib/auth/index.ts` (for server components).
+
+### Audit findings fixed
+| Route | Issue | Fix |
+|-------|-------|-----|
+| `GET /api/properties/[id]` | `getPropertyById(id)` no tenant arg → defaulted to hardcoded string | Pass `tenantId` |
+| `PATCH /api/properties/[id]` | Both `getPropertyById` calls + `updateProperty` unscoped | Pass `tenantId` to all 3 calls |
+| `POST /api/properties` | `createProperty(data)` no tenant arg | Pass `tenantId` |
+| `POST /api/visits` | `createVisit(data)` no tenant arg | Pass `tenantId` |
+| `PATCH /api/work-orders/[id]` | `updateWorkOrder(id, patch)` no tenant at store level | Pass `tenantId` (defense-in-depth after pre-fetch check) |
+| `DELETE /api/work-orders/[id]` | `deleteWorkOrder(id)` no tenant at store level | Pass `tenantId` |
+| `PATCH /api/visits/[id]` | Inline `updateWorkOrder(wo_id, ...)` on estimate transition | Pass `tenantId` |
+
+### Store hardening
+- `updateWorkOrder(id, patch, tenantId?: string)` — when `tenantId` provided, `findIndex` also matches `wo.tenant_id === tenantId`. Defense-in-depth after route pre-verification.
+- `deleteWorkOrder(id, tenantId?: string)` — same pattern.
+- GHL sync paths (`sync-completion.ts`, `sync-estimate.ts`) call `updateWorkOrder` without `tenantId` — acceptable because those paths already hold a verified WO object fetched with correct tenant context.
+
+### Webhook route exception
+`POST /api/ghl/webhooks` — HMAC-verified service-to-service endpoint. Resolves `tenant_id` from `GHL_LOCATION_TO_TENANT` env map (GHL's `locationId` field), not from a session. Correct pattern for inbound webhooks; no session auth applies.
+
+## Confirmed Decisions (Phase 8 — Authentication)
+- **Provider**: NextAuth.js v4 with CredentialsProvider. JWT session strategy, 8-hour maxAge.
+- **Demo users**: Two hardcoded users in `src/lib/auth/config.ts` — `admin@showtime.local` (TENANT_ADMIN) and `tech@showtime.local` (TECHNICIAN). Passwords default to `admin2024`/`tech2024`; overridable via `ADMIN_PASSWORD`/`TECH_PASSWORD` env vars. Production path: replace `authorize()` with bcrypt + DB lookup.
+- **Session shape**: `session.user` carries `id`, `role` (`UserRole`), `tenant_id`. Typed via `src/types/next-auth.d.ts` declaration merging on `Session`, `User`, and `JWT`.
+- **Route protection via middleware** (`src/middleware.ts`): `withAuth` wrapper. Matcher covers `/dashboard/:path*`, `/tech/:path*`, `/login`. Unauthenticated → redirect to `/login?callbackUrl=...`. TECHNICIAN accessing `/dashboard/*` → redirect to `/tech/today`. Authenticated user on `/login` → redirect to role-appropriate home.
+- **Role-appropriate home**: TECHNICIAN → `/tech/today`; everyone else → `/dashboard/overview`.
+- **`src/lib/auth/index.ts`**: `getSession()`, `requireAuth()` (redirects to /login), `requireRole(role)` (redirects to /dashboard/overview on mismatch) — server-side helpers using `getServerSession(authOptions)`.
+- **Login page** (`/login`): split-screen — left navy branding panel (dot-grid bg, feature pills, client badge), right form (email + password, cyan submit, demo credential buttons that auto-fill the form). Error shown inline on wrong credentials. Security events logged via `console.warn`.
+- **`NEXTAUTH_SECRET`**: required env var. `.env.local` (gitignored) pre-seeded for dev. `.env.example` updated with generation instructions.
+- **Auth provider decision**: NextAuth (not Supabase Auth) — resolves pending decision in `memory/technical-decisions.md`.
 
 ## Open Questions
 - Which GHL plan does Showtime use? (affects API access tier)

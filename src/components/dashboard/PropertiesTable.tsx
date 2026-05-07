@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -9,6 +9,7 @@ import {
   Wrench,
   ClipboardList,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Table,
@@ -19,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { MOCK_PROPERTIES } from "@/lib/mock-data/properties";
+import type { PropertyWithRelations } from "@/types/property";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -34,15 +35,55 @@ function formatDate(dateStr: string): string {
 
 type ActiveFilter = "all" | "active" | "inactive";
 
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+function RowSkeleton() {
+  return (
+    <TableRow>
+      {Array.from({ length: 7 }, (_, i) => (
+        <TableCell key={i}>
+          <div className="h-3 animate-pulse rounded bg-slate-100" style={{ width: `${50 + (i % 4) * 15}%` }} />
+        </TableCell>
+      ))}
+    </TableRow>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function PropertiesTable() {
+  const [properties, setProperties] = useState<PropertyWithRelations[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/properties")
+      .then((r) => r.json())
+      .then((json: { data?: PropertyWithRelations[]; error?: string }) => {
+        if (!cancelled) {
+          if (json.error) {
+            setError(json.error);
+          } else {
+            setProperties(json.data ?? []);
+          }
+          setLoading(false);
+        }
+      })
+      .catch((e: Error) => {
+        if (!cancelled) {
+          setError(e.message);
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return MOCK_PROPERTIES.filter((p) => {
+    return properties.filter((p) => {
       if (activeFilter === "active" && !p.is_active) return false;
       if (activeFilter === "inactive" && p.is_active) return false;
       if (q) {
@@ -51,13 +92,22 @@ export function PropertiesTable() {
       }
       return true;
     });
-  }, [search, activeFilter]);
+  }, [properties, search, activeFilter]);
 
   const hasFilters = search !== "" || activeFilter !== "all";
-  const total = MOCK_PROPERTIES.length;
+  const total = properties.length;
 
   const selectClass =
     "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200";
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-6">
+        <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
+        <p className="text-sm text-red-700">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
@@ -67,7 +117,9 @@ export function PropertiesTable() {
 
         {/* Result count */}
         <p className="text-sm text-slate-500">
-          {hasFilters ? (
+          {loading ? (
+            <span className="inline-block h-3 w-24 animate-pulse rounded bg-slate-200" />
+          ) : hasFilters ? (
             <>
               <span className="font-medium text-slate-700">{filtered.length}</span>
               {" of "}
@@ -146,13 +198,17 @@ export function PropertiesTable() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filtered.length === 0 ? (
+          {loading ? (
+            Array.from({ length: 5 }, (_, i) => <RowSkeleton key={i} />)
+          ) : filtered.length === 0 ? (
             <TableRow>
               <TableCell colSpan={7} className="py-16 text-center">
                 <div className="flex flex-col items-center gap-2">
                   <MapPin className="h-8 w-8 text-slate-200" />
-                  <p className="text-sm font-medium text-slate-400">No properties found</p>
-                  {hasFilters && (
+                  <p className="text-sm font-medium text-slate-400">
+                    {total === 0 ? "No properties yet." : "No properties found"}
+                  </p>
+                  {hasFilters && total > 0 && (
                     <p className="text-xs text-slate-400">
                       Try adjusting your search or filter.
                     </p>

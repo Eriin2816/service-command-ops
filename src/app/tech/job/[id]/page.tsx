@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { MOCK_WORK_ORDERS } from "@/lib/mock-data/work-orders";
-import { MOCK_PROPERTIES } from "@/lib/mock-data/properties";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth/config";
+import { getWorkOrderById } from "@/lib/db/queries/work-orders";
+import { getOrCreateVisit } from "@/lib/db/queries/visits";
 import { checklistTemplates } from "@/config/checklist-templates";
-import { getOrCreateVisit } from "@/lib/mock-data/visit-store";
 import type { ChecklistItem } from "@/types/visit";
 import { JobDetail } from "@/components/tech/JobDetail";
 
 type Props = { params: Promise<{ id: string }> };
-
-// ─── Fallback checklist for categories without a template ─────────────────────
 
 const FALLBACK_ITEMS = [
   "Assess job site and document current conditions",
@@ -20,23 +19,22 @@ const FALLBACK_ITEMS = [
   "Take before/after photos",
 ];
 
-// ─── Metadata ─────────────────────────────────────────────────────────────────
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const wo = MOCK_WORK_ORDERS.find((w) => w.id === id);
+  const session = await getServerSession(authOptions);
+  const tenantId = session?.user.tenant_id ?? "tenant-showtime";
+  const wo = await getWorkOrderById(id, tenantId);
   return { title: wo ? `${wo.wo_number} — Job Detail` : "Job Not Found" };
 }
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function TechJobDetailPage({ params }: Props) {
   const { id } = await params;
 
-  const wo = MOCK_WORK_ORDERS.find((w) => w.id === id);
-  if (!wo) notFound();
+  const session = await getServerSession(authOptions);
+  const tenantId = session?.user.tenant_id ?? "tenant-showtime";
 
-  const property = MOCK_PROPERTIES.find((p) => p.id === wo.property_id);
+  const wo = await getWorkOrderById(id, tenantId);
+  if (!wo) notFound();
 
   const template = checklistTemplates.find(
     (t) => t.serviceCategory === wo.service_category
@@ -49,18 +47,18 @@ export default async function TechJobDetailPage({ params }: Props) {
     completed: false,
   }));
 
-  // Idempotent — returns the same visit if already created for this WO.
-  const visit = getOrCreateVisit(
+  const visit = await getOrCreateVisit(
     wo.id,
     wo.property_id,
-    wo.assigned_technician_id,
-    initialChecklist
+    session?.user.technician_id ?? wo.assigned_technician_id,
+    initialChecklist,
+    tenantId
   );
 
   return (
     <JobDetail
       wo={wo}
-      property={property}
+      property={undefined}
       initialChecklist={visit.checklist}
       visitId={visit.id}
     />

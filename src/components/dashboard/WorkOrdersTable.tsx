@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { User, CalendarDays, X } from "lucide-react";
+import { User, CalendarDays, X, AlertTriangle } from "lucide-react";
 import { WorkOrderStatus, Priority, ServiceCategory } from "@/types/work-order";
+import type { WorkOrderWithRelations } from "@/types/work-order";
 import {
   Table,
   TableBody,
@@ -13,7 +14,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { MOCK_WORK_ORDERS } from "@/lib/mock-data/work-orders";
 
 // ─── Display config ───────────────────────────────────────────────────────────
 
@@ -58,15 +58,55 @@ function formatDate(dateStr: string): string {
   });
 }
 
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+function RowSkeleton() {
+  return (
+    <TableRow>
+      {Array.from({ length: 8 }, (_, i) => (
+        <TableCell key={i}>
+          <div className="h-3 animate-pulse rounded bg-slate-100" style={{ width: `${60 + (i % 3) * 20}%` }} />
+        </TableCell>
+      ))}
+    </TableRow>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function WorkOrdersTable() {
+  const [workOrders, setWorkOrders] = useState<WorkOrderWithRelations[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | "">("");
   const [categoryFilter, setCategoryFilter] = useState<ServiceCategory | "">("");
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/work-orders")
+      .then((r) => r.json())
+      .then((json: { data?: WorkOrderWithRelations[]; error?: string }) => {
+        if (!cancelled) {
+          if (json.error) {
+            setError(json.error);
+          } else {
+            setWorkOrders(json.data ?? []);
+          }
+          setLoading(false);
+        }
+      })
+      .catch((e: Error) => {
+        if (!cancelled) {
+          setError(e.message);
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   const hasFilters = statusFilter !== "" || categoryFilter !== "";
 
-  const filtered = MOCK_WORK_ORDERS.filter((wo) => {
+  const filtered = workOrders.filter((wo) => {
     if (statusFilter && wo.status !== statusFilter) return false;
     if (categoryFilter && wo.service_category !== categoryFilter) return false;
     return true;
@@ -75,21 +115,32 @@ export function WorkOrdersTable() {
   const selectClass =
     "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200";
 
+  if (error) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-6">
+        <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
+        <p className="text-sm text-red-700">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border bg-slate-50/60 px-4 py-3">
         <p className="text-sm text-slate-500">
-          {hasFilters ? (
+          {loading ? (
+            <span className="inline-block h-3 w-24 animate-pulse rounded bg-slate-200" />
+          ) : hasFilters ? (
             <>
               <span className="font-medium text-slate-700">{filtered.length}</span>
               {" of "}
-              <span className="font-medium text-slate-700">{MOCK_WORK_ORDERS.length}</span>
+              <span className="font-medium text-slate-700">{workOrders.length}</span>
               {" work orders"}
             </>
           ) : (
             <>
-              <span className="font-medium text-slate-700">{MOCK_WORK_ORDERS.length}</span>
+              <span className="font-medium text-slate-700">{workOrders.length}</span>
               {" work orders"}
             </>
           )}
@@ -157,10 +208,14 @@ export function WorkOrdersTable() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filtered.length === 0 ? (
+          {loading ? (
+            Array.from({ length: 5 }, (_, i) => <RowSkeleton key={i} />)
+          ) : filtered.length === 0 ? (
             <TableRow>
               <TableCell colSpan={8} className="py-14 text-center text-sm text-slate-400">
-                No work orders match the selected filters.
+                {workOrders.length === 0
+                  ? "No work orders yet. Create one to get started."
+                  : "No work orders match the selected filters."}
               </TableCell>
             </TableRow>
           ) : (

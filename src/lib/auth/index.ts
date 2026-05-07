@@ -1,14 +1,25 @@
-// Auth Utilities — Placeholder
-// Implement auth provider in Phase 1 (NextAuth or Supabase Auth)
+import { getServerSession as nextAuthGetServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "./config";
+import { UserRole } from "@/types/technician";
+
+export { UserRole };
+export { getTenantId } from "./tenant";
 
 export async function getSession() {
-  throw new Error("Auth not yet implemented — Phase 1");
+  return nextAuthGetServerSession(authOptions);
 }
 
+/** Redirects to /login if unauthenticated. Returns the session. */
 export async function requireAuth() {
-  throw new Error("Auth not yet implemented — Phase 1");
+  const session = await getSession();
+  if (!session) redirect("/login");
+  return session;
 }
 
-export async function requireRole(role: string) {
-  throw new Error("Auth not yet implemented — Phase 1");
+/** Redirects to /login if unauthenticated or role doesn't match. */
+export async function requireRole(role: UserRole) {
+  const session = await requireAuth();
+  if (session.user.role !== role) redirect("/dashboard/overview");
+  return session;
 }

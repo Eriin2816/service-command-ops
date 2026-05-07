@@ -75,6 +75,7 @@ export interface SanitizerSystem extends EquipmentItem {
   type?: SanitizerType;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface AutomationSystem extends EquipmentItem {
   // make/model/serial inherited — e.g. Pentair IntelliCenter, Jandy iAqualink
 }

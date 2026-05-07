@@ -33,6 +33,7 @@ export interface ListFilters {
   tenant_id?: string;
   status?: WorkOrderStatus;
   category?: string;
+  technician_id?: string;
 }
 
 export function listWorkOrders(filters: ListFilters = {}): WorkOrderWithRelations[] {
@@ -41,6 +42,7 @@ export function listWorkOrders(filters: ListFilters = {}): WorkOrderWithRelation
     if (wo.tenant_id !== tenantId) return false;
     if (filters.status && wo.status !== filters.status) return false;
     if (filters.category && wo.service_category !== filters.category) return false;
+    if (filters.technician_id && wo.assigned_technician_id !== filters.technician_id) return false;
     return true;
   });
 }
@@ -145,9 +147,12 @@ export type UpdateResult =
 
 export function updateWorkOrder(
   id: string,
-  patch: UpdateWorkOrderInput
+  patch: UpdateWorkOrderInput,
+  tenantId?: string
 ): UpdateResult {
-  const idx = store.findIndex((wo) => wo.id === id);
+  const idx = store.findIndex(
+    (wo) => wo.id === id && (tenantId === undefined || wo.tenant_id === tenantId)
+  );
   if (idx === -1) return { ok: false, notFound: true };
 
   const current = store[idx];
@@ -192,8 +197,10 @@ export function updateWorkOrder(
 // Delete
 // ---------------------------------------------------------------------------
 
-export function deleteWorkOrder(id: string): boolean {
-  const idx = store.findIndex((wo) => wo.id === id);
+export function deleteWorkOrder(id: string, tenantId?: string): boolean {
+  const idx = store.findIndex(
+    (wo) => wo.id === id && (tenantId === undefined || wo.tenant_id === tenantId)
+  );
   if (idx === -1) return false;
   store.splice(idx, 1);
   return true;

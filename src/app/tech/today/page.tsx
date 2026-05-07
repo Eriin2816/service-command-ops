@@ -10,8 +10,10 @@ import {
   CheckCircle2,
   Zap,
 } from "lucide-react";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth/config";
+import { listWorkOrders } from "@/lib/db/queries/work-orders";
 import { cn } from "@/lib/utils";
-import { MOCK_WORK_ORDERS } from "@/lib/mock-data/work-orders";
 import {
   WorkOrderStatus,
   Priority,
@@ -20,17 +22,6 @@ import {
 } from "@/types/work-order";
 
 export const metadata: Metadata = { title: "Today's Jobs" };
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const TODAY_JOB_IDS = ["wo-001", "wo-002", "wo-003"] as const;
-
-const TODAY_JOBS: WorkOrderWithRelations[] = MOCK_WORK_ORDERS.filter((wo) =>
-  TODAY_JOB_IDS.includes(wo.id as (typeof TODAY_JOB_IDS)[number])
-).sort((a, b) => {
-  const t = (s?: string) => s ?? "99:99";
-  return t(a.scheduled_time_start).localeCompare(t(b.scheduled_time_start));
-});
 
 // ─── Label maps ───────────────────────────────────────────────────────────────
 
@@ -133,14 +124,11 @@ function JobCard({ job }: { job: WorkOrderWithRelations }) {
         isInProgress && "ring-2 ring-brand-400 ring-offset-1"
       )}
     >
-      {/* Priority indicator — left edge bar */}
       {priority.bar && (
         <span className={cn("absolute left-0 top-0 h-full w-1 rounded-l-2xl", priority.bar)} />
       )}
 
-      {/* Card body */}
       <div className="flex min-h-[88px] items-start gap-3.5 pl-5 pr-4 pt-4 pb-4">
-        {/* Time column */}
         <div className="flex w-14 shrink-0 flex-col items-center pt-0.5 text-center">
           {timeInfo ? (
             <>
@@ -156,7 +144,6 @@ function JobCard({ job }: { job: WorkOrderWithRelations }) {
           )}
         </div>
 
-        {/* Timeline dot + line */}
         <div className="mt-1 flex w-px self-stretch flex-col items-center">
           <div
             className={cn(
@@ -171,9 +158,7 @@ function JobCard({ job }: { job: WorkOrderWithRelations }) {
           <div className="w-px flex-1 bg-slate-200" />
         </div>
 
-        {/* Job details */}
         <div className="min-w-0 flex-1">
-          {/* Status + priority badges */}
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={cn(
@@ -197,14 +182,12 @@ function JobCard({ job }: { job: WorkOrderWithRelations }) {
             )}
           </div>
 
-          {/* Customer name + service category */}
           <p className="mt-1.5 font-display text-base font-bold text-slate-900">
             {job.property_customer_name}
             <span className="font-normal text-slate-400"> · </span>
             {SERVICE_LABEL[job.service_category]}
           </p>
 
-          {/* Address */}
           <div className="mt-1 flex items-start gap-1">
             <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
             <div>
@@ -213,12 +196,10 @@ function JobCard({ job }: { job: WorkOrderWithRelations }) {
             </div>
           </div>
 
-          {/* WO number */}
           <p className="mt-1.5 text-[11px] font-medium text-slate-400">{job.wo_number}</p>
         </div>
       </div>
 
-      {/* CTA row */}
       <div className="border-t border-slate-100 px-4 py-0">
         <div
           className={cn(
@@ -243,15 +224,36 @@ function JobCard({ job }: { job: WorkOrderWithRelations }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function TechTodayPage() {
+export default async function TechTodayPage() {
+  const session = await getServerSession(authOptions);
+  const tenantId = session?.user.tenant_id ?? "tenant-showtime";
+  const technicianId = session?.user.technician_id;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const allWos = await listWorkOrders({
+    tenant_id:     tenantId,
+    technician_id: technicianId,
+  });
+
+  const todayJobs = allWos
+    .filter((wo) => wo.scheduled_date === today)
+    .sort((a, b) =>
+      (a.scheduled_time_start ?? "99:99").localeCompare(b.scheduled_time_start ?? "99:99")
+    );
+
   return (
     <div className="flex flex-col">
-      <DateHeader jobs={TODAY_JOBS} />
+      <DateHeader jobs={todayJobs} />
 
       <div className="space-y-3 px-4 pb-8 pt-4">
-        {TODAY_JOBS.map((job) => (
-          <JobCard key={job.id} job={job} />
-        ))}
+        {todayJobs.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <CheckCircle2 className="h-10 w-10 text-emerald-300" />
+            <p className="text-sm font-medium text-slate-500">No jobs scheduled for today</p>
+          </div>
+        ) : (
+          todayJobs.map((job) => <JobCard key={job.id} job={job} />)
+        )}
 
         <div className="flex items-center gap-3 px-2 pt-2">
           <div className="h-px flex-1 bg-slate-200" />
