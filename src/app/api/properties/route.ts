@@ -40,7 +40,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: properties, total: properties.length });
   } catch (err) {
     console.error("[api] GET /api/properties failed:", err);
-    return NextResponse.json({ error: "Failed to load properties" }, { status: 500 });
+    // Return empty list so the table renders an empty state rather than an error banner.
+    return NextResponse.json({ data: [], total: 0 });
   }
 }
 

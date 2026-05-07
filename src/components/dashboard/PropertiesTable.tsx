@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -58,28 +58,27 @@ export function PropertiesTable() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/properties")
-      .then((r) => r.json())
-      .then((json: { data?: PropertyWithRelations[]; error?: string }) => {
-        if (!cancelled) {
-          if (json.error) {
-            setError(json.error);
-          } else {
-            setProperties(json.data ?? []);
-          }
-          setLoading(false);
-        }
-      })
-      .catch((e: Error) => {
-        if (!cancelled) {
-          setError(e.message);
-          setLoading(false);
-        }
-      });
-    return () => { cancelled = true; };
+  const fetchProperties = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/properties");
+      const json = (await r.json()) as { data?: PropertyWithRelations[]; error?: string };
+      if (json.error) {
+        setError(json.error);
+      } else {
+        setProperties(json.data ?? []);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load properties");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchProperties();
+  }, [fetchProperties]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -102,9 +101,18 @@ export function PropertiesTable() {
 
   if (error) {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-6">
-        <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
-        <p className="text-sm text-red-700">{error}</p>
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 p-6">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void fetchProperties()}
+          className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+        >
+          Try again
+        </button>
       </div>
     );
   }

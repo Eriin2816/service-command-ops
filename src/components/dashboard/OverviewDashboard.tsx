@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   ClipboardList,
@@ -228,45 +228,40 @@ export function OverviewDashboard() {
 
   const today = useMemo(todayISO, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setBarsAnimated(false);
+    try {
+      const [summaryRes, woRes] = await Promise.all([
+        fetch("/api/reports/summary"),
+        fetch("/api/work-orders"),
+      ]);
 
-    async function load() {
-      try {
-        const [summaryRes, woRes] = await Promise.all([
-          fetch("/api/reports/summary"),
-          fetch("/api/work-orders"),
-        ]);
-
-        if (!summaryRes.ok || !woRes.ok) {
-          throw new Error("Failed to load dashboard data");
-        }
-
-        const [summaryJson, woJson] = await Promise.all([
-          summaryRes.json() as Promise<{ data: DashboardSummary }>,
-          woRes.json() as Promise<{ data: WorkOrderWithRelations[] }>,
-        ]);
-
-        if (!cancelled) {
-          setSummary(summaryJson.data);
-          setWorkOrders(woJson.data ?? []);
-          setLoading(false);
-          // Double rAF so the initial scaleX(0) renders before the transition fires
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => setBarsAnimated(true))
-          );
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Unknown error");
-          setLoading(false);
-        }
+      if (!summaryRes.ok || !woRes.ok) {
+        throw new Error("Failed to load dashboard data");
       }
-    }
 
-    void load();
-    return () => { cancelled = true; };
+      const [summaryJson, woJson] = await Promise.all([
+        summaryRes.json() as Promise<{ data: DashboardSummary }>,
+        woRes.json() as Promise<{ data: WorkOrderWithRelations[] }>,
+      ]);
+
+      setSummary(summaryJson.data);
+      setWorkOrders(woJson.data ?? []);
+      setLoading(false);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => setBarsAnimated(true))
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const todaysJobs = useMemo(
     () =>
@@ -306,8 +301,15 @@ export function OverviewDashboard() {
   if (error) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center">
-        <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-red-400" />
+        <AlertTriangle className="mx-auto mb-3 h-6 w-6 text-red-400" />
         <p className="text-sm font-medium text-red-700">{error}</p>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+        >
+          Try again
+        </button>
       </div>
     );
   }

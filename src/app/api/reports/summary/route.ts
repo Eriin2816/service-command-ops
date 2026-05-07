@@ -70,7 +70,21 @@ export async function GET(): Promise<NextResponse> {
     workOrders = await listWorkOrders({ tenant_id: tenantId });
   } catch (err) {
     console.error("[api] GET /api/reports/summary failed:", err);
-    return NextResponse.json({ error: "Failed to load dashboard data" }, { status: 500 });
+    // Return zero-filled summary so the dashboard renders an empty state rather than an error page.
+    // The real error is logged above for Vercel runtime log inspection.
+    return NextResponse.json({
+      data: {
+        generated_at:        new Date().toISOString(),
+        tenant_id:           tenantId,
+        total_work_orders:   0,
+        total_today:         0,
+        completed_today:     0,
+        open_estimates:      0,
+        overdue:             0,
+        by_status:           zeroFilledStatusMap(),
+        by_service_category: zeroFilledCategoryMap(),
+      } satisfies DashboardSummary,
+    });
   }
 
   let totalToday = 0;

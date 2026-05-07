@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { User, CalendarDays, X, AlertTriangle } from "lucide-react";
 import { WorkOrderStatus, Priority, ServiceCategory } from "@/types/work-order";
@@ -81,28 +81,27 @@ export function WorkOrdersTable() {
   const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | "">("");
   const [categoryFilter, setCategoryFilter] = useState<ServiceCategory | "">("");
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/work-orders")
-      .then((r) => r.json())
-      .then((json: { data?: WorkOrderWithRelations[]; error?: string }) => {
-        if (!cancelled) {
-          if (json.error) {
-            setError(json.error);
-          } else {
-            setWorkOrders(json.data ?? []);
-          }
-          setLoading(false);
-        }
-      })
-      .catch((e: Error) => {
-        if (!cancelled) {
-          setError(e.message);
-          setLoading(false);
-        }
-      });
-    return () => { cancelled = true; };
+  const fetchWorkOrders = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/work-orders");
+      const json = (await r.json()) as { data?: WorkOrderWithRelations[]; error?: string };
+      if (json.error) {
+        setError(json.error);
+      } else {
+        setWorkOrders(json.data ?? []);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load work orders");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchWorkOrders();
+  }, [fetchWorkOrders]);
 
   const hasFilters = statusFilter !== "" || categoryFilter !== "";
 
@@ -117,9 +116,18 @@ export function WorkOrdersTable() {
 
   if (error) {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-6">
-        <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
-        <p className="text-sm text-red-700">{error}</p>
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 p-6">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void fetchWorkOrders()}
+          className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+        >
+          Try again
+        </button>
       </div>
     );
   }

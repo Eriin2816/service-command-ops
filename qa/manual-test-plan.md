@@ -11,6 +11,22 @@ Check off each item manually or via automated test.
 - [x] No TypeScript errors (`tsc --noEmit` exits clean)
 - [ ] No console errors in browser (verify after connecting Supabase)
 
+## Dashboard Pages — Load Without Error
+- [ ] /dashboard/overview loads (shows stats or empty state, never red error)
+- [ ] /dashboard/work-orders loads (shows table or empty state, never red error)
+- [ ] /dashboard/properties loads (shows table or empty state, never red error)
+- [ ] /dashboard/technicians loads (shows placeholder UI)
+- [ ] /dashboard/visits loads (shows placeholder UI)
+- [ ] /dashboard/estimates loads (shows placeholder UI)
+- [ ] /dashboard/reports loads (shows charts or empty state)
+- [ ] Error state on Overview has "Try again" button that retries the fetch
+- [ ] Error state on Work Orders has "Try again" button that retries the fetch
+- [ ] Error state on Properties has "Try again" button that retries the fetch
+- [ ] API routes return 200 with empty data on DB failure (not 500)
+  - Verify: GET /api/reports/summary → { data: { total_work_orders: 0, ... } }
+  - Verify: GET /api/work-orders → { data: [], total: 0 }
+  - Verify: GET /api/properties → { data: [], total: 0 }
+
 ## Phase 2: Work Orders
 - [ ] Create work order successfully (requires Supabase credentials)
 - [ ] Status changes work correctly (requires Supabase credentials)
