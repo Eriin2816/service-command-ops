@@ -19,21 +19,21 @@ interface DemoUser {
 
 const DEMO_USERS: DemoUser[] = [
   {
-    id: "user-001",
-    name: "Marcelo Taweng",
+    id: "b0000000-0000-0000-0000-000000000001",
+    name: "Admin",
     email: "admin@showtime.local",
     password: process.env.ADMIN_PASSWORD ?? "admin2024",
     role: UserRole.TENANT_ADMIN,
-    tenant_id: "tenant-showtime",
+    tenant_id: "a0000000-0000-0000-0000-000000000001",
   },
   {
-    id: "user-002",
+    id: "b0000000-0000-0000-0000-000000000002",
     name: "Demo Technician",
     email: "tech@showtime.local",
     password: process.env.TECH_PASSWORD ?? "tech2024",
     role: UserRole.TECHNICIAN,
-    tenant_id: "tenant-showtime",
-    technician_id: "tech-001", // matches assigned_technician_id in mock work orders
+    tenant_id: "a0000000-0000-0000-0000-000000000001",
+    technician_id: "b0000000-0000-0000-0000-000000000002",
   },
 ];
 
