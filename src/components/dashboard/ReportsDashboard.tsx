@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { Printer, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WorkOrderStatus, ServiceCategory } from "@/types/work-order";
 import type { RangeReport, StatusRow, CategoryRow, TechRow } from "@/app/api/reports/range/route";
+import { useApiQuery } from "@/lib/utils/useApiQuery";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -576,47 +578,24 @@ function DateRangePicker({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function ReportsDashboard({ tenantId }: { tenantId: string }) {
-  const [preset, setPreset]   = useState<Preset>("month");
-  const [range, setRange]     = useState<DateRange>(getMonthRange);
-  const [report, setReport]   = useState<RangeReport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
+  const [preset, setPreset] = useState<Preset>("month");
+  const [range, setRange]   = useState<DateRange>(getMonthRange);
 
-  const fetchReport = useCallback(
-    async (r: DateRange) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const tid = encodeURIComponent(tenantId);
-        const res = await fetch(
-          `/api/reports/range?tenant_id=${tid}&date_from=${r.from}&date_to=${r.to}`
-        );
-        if (!res.ok) throw new Error("Failed to load report");
-        const json = (await res.json()) as { data: RangeReport };
-        setReport(json.data);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Unknown error");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [tenantId]
-  );
+  const reportUrl = useMemo(() => {
+    const tid = encodeURIComponent(tenantId);
+    return `/api/reports/range?tenant_id=${tid}&date_from=${range.from}&date_to=${range.to}`;
+  }, [tenantId, range]);
 
-  useEffect(() => {
-    void fetchReport(range);
-  }, [fetchReport, range]);
+  const { data: report, error, loading, retry } = useApiQuery<RangeReport>(reportUrl);
 
   function handlePreset(p: Preset) {
     setPreset(p);
     if (p === "week")  setRange(getWeekRange());
     if (p === "month") setRange(getMonthRange());
-    // custom: keep current range until user changes the inputs
   }
 
   function handleCustomChange(r: DateRange) {
-    setRange(r);
-    if (r.from && r.to && r.from <= r.to) void fetchReport(r);
+    if (r.from && r.to && r.from <= r.to) setRange(r);
   }
 
   return (
@@ -654,7 +633,7 @@ export function ReportsDashboard({ tenantId }: { tenantId: string }) {
 
           <div className="flex items-center gap-2 print:hidden">
             <button
-              onClick={() => void fetchReport(range)}
+              onClick={retry}
               disabled={loading}
               className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-40"
             >
@@ -672,12 +651,7 @@ export function ReportsDashboard({ tenantId }: { tenantId: string }) {
         </div>
 
         {/* ── Error state ───────────────────────────────────────────────────── */}
-        {error && (
-          <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-5 py-4">
-            <AlertCircle className="h-5 w-5 shrink-0 text-red-400" />
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
+        {error && <ErrorState message={error} onRetry={retry} />}
 
         {/* ── Summary strip ─────────────────────────────────────────────────── */}
         {loading ? (

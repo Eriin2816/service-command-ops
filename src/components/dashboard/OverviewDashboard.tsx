@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   ClipboardList,
@@ -10,11 +10,14 @@ import {
   Clock,
   ChevronRight,
 } from "lucide-react";
+// AlertTriangle still used in the overdue section below
 import { StatCard } from "@/components/dashboard/StatCard";
 import { cn } from "@/lib/utils";
 import { WorkOrderStatus, ServiceCategory } from "@/types/work-order";
 import type { WorkOrderWithRelations } from "@/types/work-order";
 import type { DashboardSummary } from "@/app/api/reports/summary/route";
+import { useApiQuery } from "@/lib/utils/useApiQuery";
+import { ErrorStateFull } from "@/components/ui/ErrorState";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -220,48 +223,27 @@ function StatusBar({ status, count, total, animated }: StatusBarProps) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function OverviewDashboard() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [workOrders, setWorkOrders] = useState<WorkOrderWithRelations[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [barsAnimated, setBarsAnimated] = useState(false);
+  const summaryQuery = useApiQuery<DashboardSummary>("/api/reports/summary");
+  const woQuery      = useApiQuery<WorkOrderWithRelations[]>("/api/work-orders");
 
+  const summary    = summaryQuery.data;
+  const workOrders = woQuery.data ?? [];
+  const loading    = summaryQuery.loading || woQuery.loading;
+  const error      = summaryQuery.error ?? woQuery.error;
+  const retry      = () => { summaryQuery.retry(); woQuery.retry(); };
+
+  const [barsAnimated, setBarsAnimated] = useState(false);
   const today = useMemo(todayISO, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setBarsAnimated(false);
-    try {
-      const [summaryRes, woRes] = await Promise.all([
-        fetch("/api/reports/summary"),
-        fetch("/api/work-orders"),
-      ]);
-
-      if (!summaryRes.ok || !woRes.ok) {
-        throw new Error("Failed to load dashboard data");
-      }
-
-      const [summaryJson, woJson] = await Promise.all([
-        summaryRes.json() as Promise<{ data: DashboardSummary }>,
-        woRes.json() as Promise<{ data: WorkOrderWithRelations[] }>,
-      ]);
-
-      setSummary(summaryJson.data);
-      setWorkOrders(woJson.data ?? []);
-      setLoading(false);
+  useEffect(() => {
+    if (!loading) {
       requestAnimationFrame(() =>
         requestAnimationFrame(() => setBarsAnimated(true))
       );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-      setLoading(false);
+    } else {
+      setBarsAnimated(false);
     }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  }, [loading]);
 
   const todaysJobs = useMemo(
     () =>
@@ -299,19 +281,7 @@ export function OverviewDashboard() {
   })();
 
   if (error) {
-    return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center">
-        <AlertTriangle className="mx-auto mb-3 h-6 w-6 text-red-400" />
-        <p className="text-sm font-medium text-red-700">{error}</p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-        >
-          Try again
-        </button>
-      </div>
-    );
+    return <ErrorStateFull message={error} onRetry={retry} />;
   }
 
   return (

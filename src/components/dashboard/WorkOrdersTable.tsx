@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { User, CalendarDays, X, AlertTriangle } from "lucide-react";
+import { User, CalendarDays, X } from "lucide-react";
 import { WorkOrderStatus, Priority, ServiceCategory } from "@/types/work-order";
 import type { WorkOrderWithRelations } from "@/types/work-order";
 import {
@@ -14,6 +14,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { useApiQuery } from "@/lib/utils/useApiQuery";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadingTableRows } from "@/components/ui/LoadingState";
 
 // ─── Display config ───────────────────────────────────────────────────────────
 
@@ -58,50 +61,14 @@ function formatDate(dateStr: string): string {
   });
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-
-function RowSkeleton() {
-  return (
-    <TableRow>
-      {Array.from({ length: 8 }, (_, i) => (
-        <TableCell key={i}>
-          <div className="h-3 animate-pulse rounded bg-slate-100" style={{ width: `${60 + (i % 3) * 20}%` }} />
-        </TableCell>
-      ))}
-    </TableRow>
-  );
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function WorkOrdersTable() {
-  const [workOrders, setWorkOrders] = useState<WorkOrderWithRelations[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error, loading, retry } = useApiQuery<WorkOrderWithRelations[]>("/api/work-orders");
+  const workOrders = data ?? [];
+
   const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | "">("");
   const [categoryFilter, setCategoryFilter] = useState<ServiceCategory | "">("");
-
-  const fetchWorkOrders = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await fetch("/api/work-orders");
-      const json = (await r.json()) as { data?: WorkOrderWithRelations[]; error?: string };
-      if (json.error) {
-        setError(json.error);
-      } else {
-        setWorkOrders(json.data ?? []);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load work orders");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchWorkOrders();
-  }, [fetchWorkOrders]);
 
   const hasFilters = statusFilter !== "" || categoryFilter !== "";
 
@@ -115,21 +82,7 @@ export function WorkOrdersTable() {
     "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200";
 
   if (error) {
-    return (
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 p-6">
-        <div className="flex items-center gap-3">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void fetchWorkOrders()}
-          className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-        >
-          Try again
-        </button>
-      </div>
-    );
+    return <ErrorState message={error} onRetry={retry} />;
   }
 
   return (
@@ -217,7 +170,7 @@ export function WorkOrdersTable() {
         </TableHeader>
         <TableBody>
           {loading ? (
-            Array.from({ length: 5 }, (_, i) => <RowSkeleton key={i} />)
+            <LoadingTableRows rows={5} cols={8} />
           ) : filtered.length === 0 ? (
             <TableRow>
               <TableCell colSpan={8} className="py-14 text-center text-sm text-slate-400">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -9,7 +9,6 @@ import {
   Wrench,
   ClipboardList,
   ExternalLink,
-  AlertTriangle,
 } from "lucide-react";
 import {
   Table,
@@ -21,6 +20,9 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { PropertyWithRelations } from "@/types/property";
+import { useApiQuery } from "@/lib/utils/useApiQuery";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { LoadingTableRows } from "@/components/ui/LoadingState";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,50 +37,14 @@ function formatDate(dateStr: string): string {
 
 type ActiveFilter = "all" | "active" | "inactive";
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-
-function RowSkeleton() {
-  return (
-    <TableRow>
-      {Array.from({ length: 7 }, (_, i) => (
-        <TableCell key={i}>
-          <div className="h-3 animate-pulse rounded bg-slate-100" style={{ width: `${50 + (i % 4) * 15}%` }} />
-        </TableCell>
-      ))}
-    </TableRow>
-  );
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function PropertiesTable() {
-  const [properties, setProperties] = useState<PropertyWithRelations[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, error, loading, retry } = useApiQuery<PropertyWithRelations[]>("/api/properties");
+  const properties = data ?? [];
+
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
-
-  const fetchProperties = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await fetch("/api/properties");
-      const json = (await r.json()) as { data?: PropertyWithRelations[]; error?: string };
-      if (json.error) {
-        setError(json.error);
-      } else {
-        setProperties(json.data ?? []);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load properties");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchProperties();
-  }, [fetchProperties]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -100,21 +66,7 @@ export function PropertiesTable() {
     "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200";
 
   if (error) {
-    return (
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 p-6">
-        <div className="flex items-center gap-3">
-          <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void fetchProperties()}
-          className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-        >
-          Try again
-        </button>
-      </div>
-    );
+    return <ErrorState message={error} onRetry={retry} />;
   }
 
   return (
@@ -207,7 +159,7 @@ export function PropertiesTable() {
         </TableHeader>
         <TableBody>
           {loading ? (
-            Array.from({ length: 5 }, (_, i) => <RowSkeleton key={i} />)
+            <LoadingTableRows rows={5} cols={7} />
           ) : filtered.length === 0 ? (
             <TableRow>
               <TableCell colSpan={7} className="py-16 text-center">
