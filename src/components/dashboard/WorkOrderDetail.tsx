@@ -270,8 +270,6 @@ function PhotoGallery({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-// ─── Property types for the picker ───────────────────────────────────────────
-
 interface PropertyOption {
   id:            string;
   customer_name: string;
@@ -279,6 +277,13 @@ interface PropertyOption {
   city:          string;
   state:         string;
   zip:           string;
+}
+
+interface TechnicianOption {
+  id:    string;
+  name:  string;
+  email: string;
+  phone: string | null;
 }
 
 export function WorkOrderDetail({
@@ -306,6 +311,15 @@ export function WorkOrderDetail({
   const [allProperties,    setAllProperties]     = useState<PropertyOption[]>([]);
   const [loadingProps,     setLoadingProps]      = useState(false);
   const [savingProperty,   setSavingProperty]    = useState(false);
+
+  // Technician assignment state
+  const [technicianId,     setTechnicianId]      = useState<string>(workOrder.assigned_technician_id ?? "");
+  const [technicianName,   setTechnicianName]    = useState<string>(workOrder.assigned_technician_name ?? "");
+  const [linkingTech,      setLinkingTech]       = useState(false);
+  const [techSearch,       setTechSearch]        = useState("");
+  const [allTechs,         setAllTechs]          = useState<TechnicianOption[]>([]);
+  const [loadingTechs,     setLoadingTechs]      = useState(false);
+  const [savingTech,       setSavingTech]        = useState(false);
 
   const handleRetrySync = useCallback(async () => {
     setRetrying(true);
@@ -388,6 +402,45 @@ export function WorkOrderDetail({
       setSavedBanner(e instanceof Error ? e.message : "Failed to link property");
     } finally {
       setSavingProperty(false);
+    }
+  }, [workOrder.id]);
+
+  const openTechPicker = useCallback(async () => {
+    setTechSearch("");
+    setLinkingTech(true);
+    if (allTechs.length > 0) return;
+    setLoadingTechs(true);
+    try {
+      const res = await fetch("/api/technicians");
+      const json = (await res.json()) as { data?: TechnicianOption[] };
+      setAllTechs(json.data ?? []);
+    } catch {
+      // silently fail
+    } finally {
+      setLoadingTechs(false);
+    }
+  }, [allTechs.length]);
+
+  const handleSelectTechnician = useCallback(async (tech: TechnicianOption) => {
+    setSavingTech(true);
+    try {
+      const res = await fetch(`/api/work-orders/${workOrder.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_technician_id: tech.id }),
+      });
+      if (!res.ok) {
+        const j = (await res.json()) as { error?: string };
+        throw new Error(j.error ?? "Save failed");
+      }
+      setTechnicianId(tech.id);
+      setTechnicianName(tech.name);
+      setLinkingTech(false);
+      setSavedBanner("Technician assigned successfully.");
+    } catch (e) {
+      setSavedBanner(e instanceof Error ? e.message : "Failed to assign technician");
+    } finally {
+      setSavingTech(false);
     }
   }, [workOrder.id]);
 
@@ -824,23 +877,128 @@ export function WorkOrderDetail({
 
           {/* Assignment */}
           <SectionCard title="Assignment">
-            <dl className="space-y-4">
-              <Field label="Assigned Technician">
-                {workOrder.assigned_technician_name ? (
-                  <span className="flex items-center gap-2">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
-                      {workOrder.assigned_technician_name.charAt(0)}
-                    </span>
-                    <span className="font-medium">{workOrder.assigned_technician_name}</span>
+            {/* ── Assigned state ── */}
+            {technicianId ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
+                    {technicianName.charAt(0)}
                   </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-slate-400">
-                    <User className="h-4 w-4" />
-                    Unassigned
-                  </span>
-                )}
-              </Field>
-            </dl>
+                  <span className="text-sm font-medium text-slate-800">{technicianName}</span>
+                </span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    title="Change assigned technician"
+                    onClick={openTechPicker}
+                    className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:border-brand-300 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Change
+                  </button>
+                  <Link
+                    href="/dashboard/technicians"
+                    className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:border-brand-300 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200"
+                  >
+                    View
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              /* ── Unassigned state ── */
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-1.5 text-slate-400">
+                  <User className="h-4 w-4" />
+                  <span className="text-sm">Unassigned</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={openTechPicker}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200"
+                >
+                  <User className="h-3.5 w-3.5" />
+                  Assign Technician
+                </button>
+              </div>
+            )}
+
+            {/* ── Technician picker ── */}
+            {linkingTech && (
+              <div className="mt-4 rounded-xl border border-border bg-slate-50/60 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-slate-500">Select a technician</p>
+                  <button
+                    type="button"
+                    onClick={() => setLinkingTech(false)}
+                    className="rounded p-0.5 text-slate-400 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-300"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="relative mb-2">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name…"
+                    autoFocus
+                    className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                    value={techSearch}
+                    onChange={(e) => setTechSearch(e.target.value)}
+                  />
+                </div>
+
+                <div className="max-h-52 overflow-y-auto rounded-lg border border-border bg-white">
+                  {loadingTechs ? (
+                    <div className="flex items-center gap-2 px-3 py-4 text-sm text-slate-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading technicians…
+                    </div>
+                  ) : (() => {
+                    const q = techSearch.toLowerCase();
+                    const filtered = allTechs.filter((t) =>
+                      t.name.toLowerCase().includes(q) ||
+                      t.email.toLowerCase().includes(q)
+                    );
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="px-3 py-4 text-sm text-slate-400">
+                          {allTechs.length === 0
+                            ? "No technicians found. Add one from the Technicians page."
+                            : "No technicians match your search."}
+                        </div>
+                      );
+                    }
+                    return filtered.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={savingTech}
+                        onClick={() => handleSelectTechnician(t)}
+                        className={cn(
+                          "flex w-full items-center gap-3 border-b border-border px-3 py-2.5 text-left last:border-0",
+                          "hover:bg-brand-50 focus-visible:bg-brand-50 focus-visible:outline-none",
+                          t.id === technicianId && "bg-brand-50/60",
+                          savingTech && "opacity-50"
+                        )}
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-700">
+                          {t.name.charAt(0)}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">{t.name}</p>
+                          <p className="truncate text-xs text-slate-500">{t.email}</p>
+                        </div>
+                        {t.id === technicianId && (
+                          <span className="ml-auto shrink-0 text-xs font-medium text-brand-600">Current</span>
+                        )}
+                      </button>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
           </SectionCard>
 
           {/* Schedule */}
