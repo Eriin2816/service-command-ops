@@ -10,7 +10,7 @@
 //                 enqueues item for future retry.
 
 import type { WorkOrderWithRelations } from "@/types/work-order";
-import { updateWorkOrder } from "@/lib/mock-data/store";
+import { updateWorkOrder } from "@/lib/db/queries/work-orders";
 import { updateOpportunity } from "./client";
 import { enqueueGhlSync } from "./retry-queue";
 
@@ -41,7 +41,7 @@ export async function syncCompletionToGhl(
 
     // Clear any previous sync failure flag now that we succeeded.
     if (workOrder.ghl_sync_failed) {
-      updateWorkOrder(workOrder.id, { ghl_sync_failed: false });
+      await updateWorkOrder(workOrder.id, { ghl_sync_failed: false }, workOrder.tenant_id);
     }
 
     return;
@@ -66,11 +66,6 @@ export async function syncCompletionToGhl(
   });
 
   // Flag the work order so the admin dashboard can surface it.
-  const flagResult = updateWorkOrder(workOrder.id, { ghl_sync_failed: true });
-  if (!flagResult.ok) {
-    // Should be unreachable — we just operated on this record.
-    console.error(`${tag} Could not set ghl_sync_failed flag: work order no longer in store`);
-  } else {
-    console.warn(`${tag} ghl_sync_failed=true set on work order ${workOrder.id}`);
-  }
+  await updateWorkOrder(workOrder.id, { ghl_sync_failed: true }, workOrder.tenant_id);
+  console.warn(`${tag} ghl_sync_failed=true set on work order ${workOrder.id}`);
 }

@@ -1,5 +1,4 @@
-// Checklist Templates — Placeholder
-// These are starter templates — customize per client in Phase 2+
+// Checklist Templates
 
 import { ServiceCategory } from "@/types/work-order";
 

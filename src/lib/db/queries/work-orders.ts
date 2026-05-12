@@ -44,7 +44,7 @@ function nullToUndef<T>(v: T | null): T | undefined {
 type WoJoinedRow = {
   id: string;
   tenant_id: string;
-  property_id: string;
+  property_id: string | null;
   wo_number: number;
   ghl_contact_id: string | null;
   ghl_opportunity_id: string | null;
@@ -60,6 +60,7 @@ type WoJoinedRow = {
   completed_at: string | null;
   estimate_handoff_status: string;
   ghl_sync_failed: boolean;
+  recurring_schedule_id: string | null;
   created_at: string;
   updated_at: string;
   // Embedded joins
@@ -72,7 +73,7 @@ function mapRow(row: WoJoinedRow): WorkOrderWithRelations {
   return {
     id:                     row.id,
     tenant_id:              row.tenant_id,
-    property_id:            row.property_id,
+    property_id:            row.property_id ?? "",
     wo_number:              fmtWoNumber(row.wo_number),
     ghl_contact_id:         nullToUndef(row.ghl_contact_id),
     ghl_opportunity_id:     nullToUndef(row.ghl_opportunity_id),
@@ -88,6 +89,7 @@ function mapRow(row: WoJoinedRow): WorkOrderWithRelations {
     completed_at:           nullToUndef(row.completed_at),
     estimate_handoff_status: row.estimate_handoff_status as EstimateHandoffStatus,
     ghl_sync_failed:        row.ghl_sync_failed || undefined,
+    recurring_schedule_id:  nullToUndef(row.recurring_schedule_id),
     created_at:             row.created_at,
     updated_at:             row.updated_at,
     // Computed relation fields
@@ -126,6 +128,8 @@ export interface ListFilters {
   status?: WorkOrderStatus;
   category?: string;
   technician_id?: string;
+  property_id?: string;
+  estimate?: boolean; // when true, filter where estimate_handoff_status != 'not_needed'
 }
 
 // ---------------------------------------------------------------------------
@@ -143,9 +147,11 @@ export async function listWorkOrders(
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
-  if (filters.status)       query = query.eq("status", filters.status);
-  if (filters.category)     query = query.eq("service_category", filters.category);
+  if (filters.status)        query = query.eq("status", filters.status);
+  if (filters.category)      query = query.eq("service_category", filters.category);
   if (filters.technician_id) query = query.eq("assigned_technician_id", filters.technician_id);
+  if (filters.property_id)   query = query.eq("property_id", filters.property_id);
+  if (filters.estimate)      query = query.neq("estimate_handoff_status", EstimateHandoffStatus.NOT_NEEDED);
 
   const { data, error } = await query;
   if (error) throw new Error(`[db] listWorkOrders: ${error.message}`);
@@ -203,7 +209,7 @@ export async function createWorkOrder(
     .from("work_orders")
     .insert({
       tenant_id:        tenantId,
-      property_id:      "00000000-0000-0000-0000-000000000000", // placeholder until form wires property selection
+      property_id:      null,
       title:            input.title,
       description:      input.description,
       status:           WorkOrderStatus.NEW,

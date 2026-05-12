@@ -83,7 +83,6 @@ export interface AutomationSystem extends EquipmentItem {
 // ---------------------------------------------------------------------------
 // PoolEquipment — stored as JSONB on the property record.
 // Captures the current state of the pool's equipment, not historical changes.
-// Equipment replacement history is tracked in the equipment_records table (Phase 4+).
 // ---------------------------------------------------------------------------
 
 export interface PoolEquipment {

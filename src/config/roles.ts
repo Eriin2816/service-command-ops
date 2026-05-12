@@ -1,4 +1,4 @@
-// Role Permissions Configuration — Placeholder
+// Role Permissions Configuration
 
 import { UserRole } from "@/types/technician";
 

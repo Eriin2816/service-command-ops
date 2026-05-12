@@ -86,9 +86,12 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     );
   }
 
+  // Extract retry_ghl_sync flag before passing to DB — it's not a DB column.
+  const { retry_ghl_sync: retryGhlSync, ...dbPatch } = result.data;
+
   let updateResult;
   try {
-    updateResult = await updateWorkOrder(id, result.data, tenantId);
+    updateResult = await updateWorkOrder(id, dbPatch, tenantId);
   } catch (err) {
     console.error("[api] PATCH /api/work-orders/[id] failed:", err);
     return NextResponse.json({ error: "Failed to update work order" }, { status: 500 });
@@ -110,8 +113,22 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const updatedWo = updateResult.data;
 
-  if (updatedWo.status === WorkOrderStatus.COMPLETED) {
-    void syncCompletionToGhl(updatedWo);
+  // Trigger GHL sync when status transitions to COMPLETED, or when the
+  // client explicitly requests a retry (retry_ghl_sync: true) after a
+  // previous sync failure. Use pre-update workOrder.ghl_sync_failed to
+  // decide — the DB record may have cleared it during the update.
+  const shouldSync =
+    updatedWo.status === WorkOrderStatus.COMPLETED ||
+    (retryGhlSync === true && workOrder.ghl_sync_failed === true);
+
+  if (shouldSync) {
+    const syncPromise = syncCompletionToGhl(updatedWo).catch(console.error);
+    // waitUntil keeps the sync alive past the HTTP response in serverless
+    // environments (Vercel Edge / Next.js). Falls back to fire-and-forget.
+    if (typeof (globalThis as Record<string, unknown>).waitUntil === "function") {
+      (globalThis as unknown as { waitUntil: (p: Promise<unknown>) => void }).waitUntil(syncPromise);
+    }
+    // syncPromise is already floating — no else needed.
   }
 
   return NextResponse.json({ data: updatedWo });

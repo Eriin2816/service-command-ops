@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
+import { getServerSession } from "next-auth/next";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/lib/auth/config";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ReportsDashboard } from "@/components/dashboard/ReportsDashboard";
 
 export const metadata: Metadata = { title: "Reports" };
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user.tenant_id) redirect("/login");
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 print:max-w-none print:space-y-4">
       <div className="print:hidden">
@@ -14,7 +20,7 @@ export default function ReportsPage() {
           Work order KPIs, status breakdown, and technician summaries.
         </p>
       </div>
-      <ReportsDashboard tenantId="tenant-showtime" />
+      <ReportsDashboard tenantId={session.user.tenant_id} />
     </div>
   );
 }

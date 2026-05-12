@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, type FormEvent } from "react";
 import { X, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { Priority } from "@/types/work-order";
 import { NewWorkOrderSchema, type NewWorkOrderFieldErrors } from "@/lib/validation/work-order";
-import { serviceTypes, PRIORITY_OPTIONS, MOCK_TECHNICIANS } from "@/config/service-types";
+import { serviceTypes, PRIORITY_OPTIONS } from "@/config/service-types";
 import { cn } from "@/lib/utils";
 
 // ─── Priority selector config ─────────────────────────────────────────────────
@@ -83,14 +83,32 @@ interface NewWorkOrderModalProps {
   onSuccess: (woNumber: string) => void;
 }
 
+interface TechnicianOption {
+  id: string;
+  name: string;
+}
+
 export function NewWorkOrderModal({ open, onClose, onSuccess }: NewWorkOrderModalProps) {
   const [values, setValues] = useState<FormValues>(DEFAULTS);
   const [errors, setErrors] = useState<NewWorkOrderFieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successWoNumber, setSuccessWoNumber] = useState<string | null>(null);
+  const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
 
   const titleRef = useRef<HTMLInputElement>(null);
+
+  // Fetch technicians once on first open
+  useEffect(() => {
+    if (!open || technicians.length > 0) return;
+    fetch("/api/technicians")
+      .then((r) => r.json())
+      .then((json: { data?: TechnicianOption[] }) => {
+        if (json.data) setTechnicians(json.data);
+      })
+      .catch(() => {/* leave empty — unassigned is valid */});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Body scroll lock + Escape key
   useEffect(() => {
@@ -341,16 +359,12 @@ export function NewWorkOrderModal({ open, onClose, onSuccess }: NewWorkOrderModa
                     className={inputClass}
                   >
                     <option value="">Unassigned</option>
-                    {MOCK_TECHNICIANS.map((t) => (
+                    {technicians.map((t) => (
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
                   </select>
                 </Field>
               </div>
-
-              <p className="rounded-lg bg-slate-50 px-4 py-3 text-xs text-slate-400">
-                <strong className="text-slate-500">Phase 3:</strong> Property linking will be added when property profiles are built. For now, work orders are created without a linked property.
-              </p>
 
             </form>
           )}

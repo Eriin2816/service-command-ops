@@ -1,41 +1,8 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import { supabaseAdmin } from "@/lib/db/supabase";
 import { UserRole } from "@/types/technician";
-
-// ---------------------------------------------------------------------------
-// MVP demo users — replace with DB lookup + bcrypt in production.
-// Passwords can be overridden via env vars for staging/review environments.
-// ---------------------------------------------------------------------------
-
-interface DemoUser {
-  id: string;
-  name: string;
-  email: string;
-  password: string;
-  role: UserRole;
-  tenant_id: string;
-  technician_id?: string; // work-order-store record ID; only set for TECHNICIAN role
-}
-
-const DEMO_USERS: DemoUser[] = [
-  {
-    id: "b0000000-0000-0000-0000-000000000001",
-    name: "Admin",
-    email: "admin@showtime.local",
-    password: process.env.ADMIN_PASSWORD ?? "admin2024",
-    role: UserRole.TENANT_ADMIN,
-    tenant_id: "a0000000-0000-0000-0000-000000000001",
-  },
-  {
-    id: "b0000000-0000-0000-0000-000000000002",
-    name: "Demo Technician",
-    email: "tech@showtime.local",
-    password: process.env.TECH_PASSWORD ?? "tech2024",
-    role: UserRole.TECHNICIAN,
-    tenant_id: "a0000000-0000-0000-0000-000000000001",
-    technician_id: "b0000000-0000-0000-0000-000000000002",
-  },
-];
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -48,14 +15,26 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = DEMO_USERS.find(
-          (u) =>
-            u.email.toLowerCase() === credentials.email.toLowerCase() &&
-            u.password === credentials.password
-        );
+        const { data: user, error } = await supabaseAdmin
+          .from("users")
+          .select("id, email, password_hash, name, role, tenant_id, is_active")
+          .eq("email", credentials.email.toLowerCase())
+          .eq("is_active", true)
+          .single();
 
-        if (!user) {
-          console.warn("[auth] Failed login attempt — invalid credentials");
+        if (error || !user) {
+          console.warn("[auth] Failed login — user not found:", credentials.email);
+          return null;
+        }
+
+        if (!user.password_hash) {
+          console.warn("[auth] Failed login — no password_hash set for user:", credentials.email);
+          return null;
+        }
+
+        const passwordMatch = await bcrypt.compare(credentials.password, user.password_hash);
+        if (!passwordMatch) {
+          console.warn("[auth] Failed login — incorrect password for:", credentials.email);
           return null;
         }
 
@@ -63,9 +42,10 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role,
+          role: user.role as UserRole,
           tenant_id: user.tenant_id,
-          technician_id: user.technician_id,
+          // For TECHNICIAN role, the user ID IS the technician ID in this schema
+          technician_id: user.role === UserRole.TECHNICIAN ? user.id : undefined,
         };
       },
     }),

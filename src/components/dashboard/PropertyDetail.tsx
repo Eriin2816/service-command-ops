@@ -45,6 +45,7 @@ import { WorkOrderStatus } from "@/types/work-order";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { cn } from "@/lib/utils";
 import { NewWorkOrderModal } from "@/components/dashboard/NewWorkOrderModal";
+import { ServiceScheduleCard } from "@/components/dashboard/ServiceScheduleCard";
 
 // ─── Enum label maps ───────────────────────────────────────────────────────────
 
@@ -868,6 +869,9 @@ export function PropertyDetail({
               <p className="text-sm text-slate-300">No standing instructions on file.</p>
             )}
           </SectionCard>
+
+          {/* Service Schedule */}
+          <ServiceScheduleCard propertyId={prop.id} />
 
           {/* Work Order History */}
           <SectionCard title="Work Order History">

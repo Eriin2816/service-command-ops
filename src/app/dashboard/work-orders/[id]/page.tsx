@@ -1,22 +1,49 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { MOCK_WORK_ORDERS } from "@/lib/mock-data/work-orders";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth/config";
+import { getWorkOrderById } from "@/lib/db/queries/work-orders";
+import { listVisits } from "@/lib/db/queries/visits";
 import { WorkOrderDetail } from "@/components/dashboard/WorkOrderDetail";
 
 type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const wo = MOCK_WORK_ORDERS.find((w) => w.id === id);
-  if (!wo) return { title: "Work Order Not Found" };
-  return { title: `${wo.wo_number} – ${wo.title}` };
+  const session = await getServerSession(authOptions);
+  const tenantId = (session?.user as Record<string, string> | undefined)?.tenant_id;
+  try {
+    const wo = await getWorkOrderById(id, tenantId);
+    if (!wo) return { title: "Work Order Not Found" };
+    return { title: `${wo.wo_number} – ${wo.title}` };
+  } catch {
+    return { title: "Work Order" };
+  }
 }
 
 export default async function WorkOrderDetailPage({ params }: Props) {
   const { id } = await params;
-  const workOrder = MOCK_WORK_ORDERS.find((w) => w.id === id);
+  const session = await getServerSession(authOptions);
+  const tenantId = (session?.user as Record<string, string> | undefined)?.tenant_id;
+
+  let workOrder;
+  try {
+    workOrder = await getWorkOrderById(id, tenantId);
+  } catch (err) {
+    console.error("[page] WorkOrderDetailPage failed:", err);
+    notFound();
+  }
 
   if (!workOrder) notFound();
 
-  return <WorkOrderDetail workOrder={workOrder} />;
+  // Find the most recent active or completed visit so the admin can see photos
+  let visitId: string | undefined;
+  try {
+    const visits = await listVisits({ tenant_id: tenantId, work_order_id: id });
+    visitId = visits[0]?.id;
+  } catch {
+    // Non-fatal — page still renders without photos
+  }
+
+  return <WorkOrderDetail workOrder={workOrder} visitId={visitId} />;
 }

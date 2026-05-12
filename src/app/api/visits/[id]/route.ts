@@ -3,6 +3,7 @@ import { PatchVisitSchema } from "@/lib/validation/visit";
 import { getVisitById, updateVisit } from "@/lib/db/queries/visits";
 import { WorkOrderStatus, EstimateHandoffStatus } from "@/types/work-order";
 import { updateWorkOrder } from "@/lib/db/queries/work-orders";
+import { createEstimateHandoff } from "@/lib/db/queries/estimate-handoffs";
 import { syncEstimateToGhl } from "@/lib/ghl/sync-estimate";
 import { requireApiAuth, isTechnicianScoped, getTenantId } from "@/lib/auth/api-auth";
 
@@ -101,7 +102,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     !existingVisit.estimate_flagged && updatedVisit.estimate_flagged;
 
   if (estimateFlaggedNow) {
-    // Pass tenantId so the work order update is tenant-scoped at the store level.
+    // Update work order status + estimate_handoff_status field
     void updateWorkOrder(
       updatedVisit.work_order_id,
       {
@@ -110,6 +111,14 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       },
       tenantId
     );
+    // Write the estimate_handoffs record (source of truth for estimate state machine)
+    void createEstimateHandoff({
+      tenant_id:                tenantId,
+      work_order_id:            updatedVisit.work_order_id,
+      visit_id:                 updatedVisit.id,
+      flagged_by_technician_id: auth.session.user.technician_id ?? undefined,
+    }).catch((err) => console.error("[visits/PATCH] createEstimateHandoff failed:", err));
+    // Sync to GHL (fire-and-forget)
     void syncEstimateToGhl(updatedVisit);
   }
 

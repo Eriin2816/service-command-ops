@@ -11,6 +11,7 @@
 
 import type { GHLContactCreatePayload, GHLContactUpdatePayload } from "@/types/ghl";
 import type { PropertyWithRelations } from "@/types/property";
+import type { PatchPropertyInput } from "@/lib/validation/property";
 import { findPropertyByGhlContactId, createProperty, updateProperty } from "@/lib/db/queries/properties";
 import { resolveTenantId } from "./tenant-config";
 
@@ -60,7 +61,7 @@ export async function upsertPropertyFromGHL(
 
   if (existing) {
     // ── 4. Update — patch non-empty fields ──────────────────────────────────
-    const patch: Record<string, string> = {};
+    const patch: Partial<PatchPropertyInput> = {};
     if (customerName !== "Unknown Contact") patch.customer_name = customerName;
     if (payload.address1?.trim()) patch.address_line1 = payload.address1.trim().slice(0, 200);
     if (payload.city?.trim())     patch.city           = payload.city.trim().slice(0, 100);
@@ -71,7 +72,7 @@ export async function upsertPropertyFromGHL(
       return { outcome: "skipped", reason: "No patchable fields in payload" };
     }
 
-    const result = await updateProperty(existing.id, patch, tenantId);
+    const result = await updateProperty(existing.id, patch as PatchPropertyInput, tenantId);
     if (!result.ok) {
       console.error(`${tag} updateProperty returned notFound for id="${existing.id}"`);
       return { outcome: "error", reason: "Property disappeared between lookup and update" };
@@ -99,9 +100,13 @@ export async function upsertPropertyFromGHL(
       ghl_contact_id: payload.id,
       customer_name:  customerName,
       address_line1:  address1.slice(0, 200),
+      address_line2:  undefined,
       city:           city.slice(0, 100),
       state,
       zip,
+      gate_code:      undefined,
+      access_notes:   undefined,
+      service_notes:  undefined,
       is_active:      true,
     },
     tenantId

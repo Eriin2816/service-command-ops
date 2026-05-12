@@ -1,4 +1,4 @@
-// Technician Types — Placeholder
+// Technician Types
 
 export enum UserRole {
   PLATFORM_OWNER = "platform_owner",

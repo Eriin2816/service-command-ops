@@ -50,17 +50,20 @@ export async function POST(request: NextRequest) {
   // ── Signature verification ─────────────────────────────────────────────────
   const secret = process.env.GHL_WEBHOOK_SECRET;
 
-  if (secret) {
+  if (!secret) {
+    // Block all requests in production if the secret is not configured.
+    if (process.env.NODE_ENV === "production") {
+      console.error("[ghl/webhooks] GHL_WEBHOOK_SECRET is not set — rejecting request in production");
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+    }
+    // Dev/test mode only — accept without verification.
+    console.warn("[ghl/webhooks] GHL_WEBHOOK_SECRET not set — signature verification skipped (dev mode)");
+  } else {
     const signatureHeader = request.headers.get("x-ghl-signature") ?? "";
     if (!verifySignature(rawBody, signatureHeader, secret)) {
       console.warn("[ghl/webhooks] Rejected: invalid signature");
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
-  } else {
-    // No secret configured — accept but warn. Dev/test mode only.
-    console.warn(
-      "[ghl/webhooks] GHL_WEBHOOK_SECRET is not set — signature verification skipped (dev mode)"
-    );
   }
 
   // ── Parse payload ──────────────────────────────────────────────────────────

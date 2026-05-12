@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   User,
@@ -15,6 +15,16 @@ import {
   CircleDot,
   Info,
   Building2,
+  RefreshCw,
+  Camera,
+  X,
+  Loader2,
+  ImageIcon,
+  Pencil,
+  Search,
+  Link2,
+  Link2Off,
+  FileDown,
 } from "lucide-react";
 import {
   WorkOrderStatus,
@@ -116,14 +126,270 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+// ─── Photo gallery ────────────────────────────────────────────────────────────
+
+interface SignedPhoto {
+  path: string;
+  signedUrl: string;
+  uploadedAt: number;
+}
+
+function PhotoGallery({
+  visitId,
+  technicianName,
+}: {
+  visitId: string;
+  technicianName: string | undefined;
+}) {
+  const [photos, setPhotos]     = useState<SignedPhoto[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [lightbox, setLightbox] = useState<SignedPhoto | null>(null);
+  const backdropRef             = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await fetch(`/api/visits/${visitId}/photos`);
+        const json = (await res.json()) as { data?: SignedPhoto[]; error?: string };
+        if (!cancelled && json.data) setPhotos(json.data);
+      } catch {
+        // Non-fatal
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [visitId]);
+
+  // Close lightbox on Escape
+  useEffect(() => {
+    if (!lightbox) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightbox(null);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [lightbox]);
+
+  function formatUploadedAt(ms: number): string {
+    if (!ms) return "";
+    return new Date(ms).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  if (loading) {
+    return (
+      <SectionCard title="Job Photos">
+        <div className="flex items-center gap-2 text-sm text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading photos…
+        </div>
+      </SectionCard>
+    );
+  }
+
+  if (photos.length === 0) {
+    return (
+      <SectionCard title="Job Photos">
+        <div className="flex flex-col items-center gap-2 py-6 text-slate-400">
+          <Camera className="h-8 w-8" />
+          <p className="text-sm">No photos taken for this visit</p>
+        </div>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <>
+      <SectionCard title="Job Photos">
+        <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
+          <ImageIcon className="h-3.5 w-3.5" />
+          <span>
+            {photos.length} photo{photos.length !== 1 ? "s" : ""}
+            {technicianName ? ` · taken by ${technicianName}` : ""}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
+          {photos.map((photo) => (
+            <button
+              key={photo.path}
+              type="button"
+              onClick={() => setLightbox(photo)}
+              className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photo.signedUrl}
+                alt="Job photo"
+                className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />
+            </button>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          ref={backdropRef}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={(e) => { if (e.target === backdropRef.current) setLightbox(null); }}
+        >
+          <div className="relative max-h-full max-w-3xl">
+            <button
+              type="button"
+              onClick={() => setLightbox(null)}
+              className="absolute -right-3 -top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-lg hover:bg-slate-100"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightbox.signedUrl}
+              alt="Job photo full size"
+              className="max-h-[80vh] max-w-full rounded-lg object-contain shadow-2xl"
+            />
+            <div className="mt-2 text-center text-xs text-slate-300">
+              {formatUploadedAt(lightbox.uploadedAt)}
+              {technicianName ? ` · ${technicianName}` : ""}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function WorkOrderDetail({ workOrder }: { workOrder: WorkOrderWithRelations }) {
+// ─── Property types for the picker ───────────────────────────────────────────
+
+interface PropertyOption {
+  id:            string;
+  customer_name: string;
+  address_line1: string;
+  city:          string;
+  state:         string;
+  zip:           string;
+}
+
+export function WorkOrderDetail({
+  workOrder,
+  visitId,
+}: {
+  workOrder: WorkOrderWithRelations;
+  visitId?: string;
+}) {
   const [status, setStatus] = useState<WorkOrderStatus>(workOrder.status);
   const [estimateHandoff, setEstimateHandoff] = useState<EstimateHandoffStatus>(
     workOrder.estimate_handoff_status
   );
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
+  const [ghlSyncFailed, setGhlSyncFailed] = useState<boolean>(workOrder.ghl_sync_failed ?? false);
+  const [retrying, setRetrying] = useState(false);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
+  // Property linking state
+  const [propertyId,       setPropertyId]       = useState<string>(workOrder.property_id ?? "");
+  const [propertyName,     setPropertyName]      = useState<string>(workOrder.property_customer_name);
+  const [propertyAddress,  setPropertyAddress]   = useState<string>(workOrder.property_address);
+  const [linkingProperty,  setLinkingProperty]   = useState(false);
+  const [propertySearch,   setPropertySearch]    = useState("");
+  const [allProperties,    setAllProperties]     = useState<PropertyOption[]>([]);
+  const [loadingProps,     setLoadingProps]      = useState(false);
+  const [savingProperty,   setSavingProperty]    = useState(false);
+
+  const handleRetrySync = useCallback(async () => {
+    setRetrying(true);
+    try {
+      const res = await fetch(`/api/work-orders/${workOrder.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ retry_ghl_sync: true }),
+      });
+      if (res.ok) {
+        setGhlSyncFailed(false);
+        setSavedBanner("GHL sync retry queued — check Vercel logs for result.");
+      } else {
+        setSavedBanner("Retry request failed. Please try again.");
+      }
+    } catch {
+      setSavedBanner("Network error — retry request could not be sent.");
+    } finally {
+      setRetrying(false);
+    }
+  }, [workOrder.id]);
+
+  const handleDownloadReport = useCallback(async () => {
+    setDownloadingReport(true);
+    try {
+      const res = await fetch(`/api/work-orders/${workOrder.id}/report`);
+      if (!res.ok) {
+        const j = (await res.json()) as { error?: string };
+        throw new Error(j.error ?? "Download failed");
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `${workOrder.wo_number}-completion-report.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setSavedBanner(e instanceof Error ? e.message : "Failed to generate report");
+    } finally {
+      setDownloadingReport(false);
+    }
+  }, [workOrder.id, workOrder.wo_number]);
+
+  // Load property list when picker opens
+  const openPropertyPicker = useCallback(async () => {
+    setPropertySearch("");
+    setLinkingProperty(true);
+    if (allProperties.length > 0) return;
+    setLoadingProps(true);
+    try {
+      const res = await fetch("/api/properties?is_active=true");
+      const json = (await res.json()) as { data?: PropertyOption[] };
+      setAllProperties(json.data ?? []);
+    } catch {
+      // silently fail — picker will show empty
+    } finally {
+      setLoadingProps(false);
+    }
+  }, [allProperties.length]);
+
+  const handleSelectProperty = useCallback(async (prop: PropertyOption) => {
+    setSavingProperty(true);
+    try {
+      const res = await fetch(`/api/work-orders/${workOrder.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ property_id: prop.id }),
+      });
+      if (!res.ok) {
+        const j = (await res.json()) as { error?: string };
+        throw new Error(j.error ?? "Save failed");
+      }
+      setPropertyId(prop.id);
+      setPropertyName(prop.customer_name);
+      setPropertyAddress(`${prop.address_line1}, ${prop.city}, ${prop.state} ${prop.zip}`);
+      setLinkingProperty(false);
+      setSavedBanner("Property linked successfully.");
+    } catch (e) {
+      setSavedBanner(e instanceof Error ? e.message : "Failed to link property");
+    } finally {
+      setSavingProperty(false);
+    }
+  }, [workOrder.id]);
 
   const allowedTransitions = WORK_ORDER_STATUS_TRANSITIONS[status];
   const canFlagEstimate = allowedTransitions.includes(WorkOrderStatus.ESTIMATE_NEEDED);
@@ -148,7 +414,6 @@ export function WorkOrderDetail({ workOrder }: { workOrder: WorkOrderWithRelatio
   const statusCfg = STATUS_CONFIG[status];
   const priorityCfg = PRIORITY_CONFIG[workOrder.priority];
 
-  // Build placeholder status history from timestamps
   const statusHistory = [
     { icon: CircleDot, label: "Work order created", time: formatDateTime(workOrder.created_at), isCurrent: false },
     ...(workOrder.status !== WorkOrderStatus.NEW
@@ -159,7 +424,28 @@ export function WorkOrderDetail({ workOrder }: { workOrder: WorkOrderWithRelatio
   return (
     <div className="mx-auto max-w-7xl space-y-5">
 
-      {/* Mock save banner */}
+      {/* GHL sync failed banner */}
+      {ghlSyncFailed && (
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <p className="text-sm text-amber-800">
+              GHL sync failed for this job. The status was not updated in GoHighLevel. Retry or update manually.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleRetrySync}
+            disabled={retrying}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:opacity-50"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", retrying && "animate-spin")} />
+            {retrying ? "Retrying…" : "Retry Sync"}
+          </button>
+        </div>
+      )}
+
+      {/* Save confirmation banner */}
       {savedBanner && (
         <div className="flex items-start gap-2 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
@@ -199,8 +485,21 @@ export function WorkOrderDetail({ workOrder }: { workOrder: WorkOrderWithRelatio
           </div>
 
           {/* Action bar */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadReport}
+              disabled={downloadingReport}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200 disabled:opacity-50"
+            >
+              {downloadingReport
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <FileDown className="h-4 w-4" />}
+              {downloadingReport ? "Generating…" : "Download Report"}
+            </button>
+
           {!isTerminal && (
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <>
               {canFlagEstimate && (
                 <button
                   type="button"
@@ -238,8 +537,9 @@ export function WorkOrderDetail({ workOrder }: { workOrder: WorkOrderWithRelatio
                   No further transitions
                 </span>
               )}
-            </div>
+            </>
           )}
+          </div>
         </div>
       </div>
 
@@ -299,27 +599,143 @@ export function WorkOrderDetail({ workOrder }: { workOrder: WorkOrderWithRelatio
 
           {/* Property */}
           <SectionCard title="Property">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-                  <Building2 className="h-4 w-4 text-slate-500" />
+            {/* ── Linked state ── */}
+            {propertyId ? (
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50">
+                    <Building2 className="h-4 w-4 text-brand-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-800">{propertyName}</p>
+                    <p className="mt-0.5 flex items-start gap-1 text-sm text-slate-500">
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      {propertyAddress}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-slate-800">{workOrder.property_customer_name}</p>
-                  <p className="mt-0.5 flex items-start gap-1 text-sm text-slate-500">
-                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    {workOrder.property_address}
-                  </p>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    title="Change linked property"
+                    onClick={openPropertyPicker}
+                    className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:border-brand-300 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Change
+                  </button>
+                  <Link
+                    href={`/dashboard/properties/${propertyId}`}
+                    className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:border-brand-300 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200"
+                  >
+                    View
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Link>
                 </div>
               </div>
-              <Link
-                href={`/dashboard/properties/${workOrder.property_id}`}
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:border-brand-300 hover:text-brand-600"
-              >
-                View Property
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
+            ) : (
+              /* ── Unlinked state ── */
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 text-slate-400">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+                    <Link2Off className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-500">No property linked</p>
+                    <p className="text-xs text-slate-400">Link a property to see address and equipment details.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={openPropertyPicker}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-200"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  Link Property
+                </button>
+              </div>
+            )}
+
+            {/* ── Property picker ── */}
+            {linkingProperty && (
+              <div className="mt-4 rounded-xl border border-border bg-slate-50/60 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-slate-500">Select a property</p>
+                  <button
+                    type="button"
+                    onClick={() => setLinkingProperty(false)}
+                    className="rounded p-0.5 text-slate-400 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-300"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Search input */}
+                <div className="relative mb-2">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by customer name or address…"
+                    autoFocus
+                    className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-sm text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                    value={propertySearch}
+                    onChange={(e) => setPropertySearch(e.target.value)}
+                  />
+                </div>
+
+                {/* Results list */}
+                <div className="max-h-52 overflow-y-auto rounded-lg border border-border bg-white">
+                  {loadingProps ? (
+                    <div className="flex items-center gap-2 px-3 py-4 text-sm text-slate-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading properties…
+                    </div>
+                  ) : (() => {
+                    const q = propertySearch.toLowerCase();
+                    const filtered = allProperties.filter(
+                      (p) =>
+                        p.customer_name.toLowerCase().includes(q) ||
+                        p.address_line1.toLowerCase().includes(q) ||
+                        p.city.toLowerCase().includes(q)
+                    );
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="px-3 py-4 text-sm text-slate-400">
+                          {allProperties.length === 0
+                            ? "No properties found. Add one from the Properties page."
+                            : "No properties match your search."}
+                        </div>
+                      );
+                    }
+                    return filtered.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        disabled={savingProperty}
+                        onClick={() => handleSelectProperty(p)}
+                        className={cn(
+                          "flex w-full items-start gap-3 border-b border-border px-3 py-2.5 text-left last:border-0",
+                          "hover:bg-brand-50 focus-visible:bg-brand-50 focus-visible:outline-none",
+                          p.id === propertyId && "bg-brand-50/60",
+                          savingProperty && "opacity-50"
+                        )}
+                      >
+                        <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">{p.customer_name}</p>
+                          <p className="truncate text-xs text-slate-500">
+                            {p.address_line1}, {p.city}, {p.state} {p.zip}
+                          </p>
+                        </div>
+                        {p.id === propertyId && (
+                          <span className="ml-auto shrink-0 text-xs font-medium text-brand-600">Current</span>
+                        )}
+                      </button>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
           </SectionCard>
 
           {/* Estimate Handoff — only shown when flagged */}
@@ -367,7 +783,15 @@ export function WorkOrderDetail({ workOrder }: { workOrder: WorkOrderWithRelatio
             </SectionCard>
           )}
 
-          {/* Status History (placeholder) */}
+          {/* Job Photos */}
+          {visitId && (
+            <PhotoGallery
+              visitId={visitId}
+              technicianName={workOrder.assigned_technician_name ?? undefined}
+            />
+          )}
+
+          {/* Status History */}
           <SectionCard title="Status History">
             <ol className="space-y-4">
               {statusHistory.map((entry, i) => {
@@ -392,7 +816,6 @@ export function WorkOrderDetail({ workOrder }: { workOrder: WorkOrderWithRelatio
                 );
               })}
             </ol>
-            <p className="mt-4 text-xs text-slate-400">Full history log coming in Phase 3.</p>
           </SectionCard>
         </div>
 
@@ -418,7 +841,6 @@ export function WorkOrderDetail({ workOrder }: { workOrder: WorkOrderWithRelatio
                 )}
               </Field>
             </dl>
-            <p className="mt-4 text-xs text-slate-400">Technician reassignment coming in Phase 2 create form.</p>
           </SectionCard>
 
           {/* Schedule */}

@@ -1,4 +1,4 @@
-// Tenant Types — Placeholder (Multi-Tenant SaaS)
+// Tenant Types
 
 export interface Tenant {
   id: string;

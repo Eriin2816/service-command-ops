@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, forwardRef, useImperativeHandle } from "react";
 import Link from "next/link";
-import { User, CalendarDays, X } from "lucide-react";
+import { User, CalendarDays, X, RefreshCw } from "lucide-react";
 import { WorkOrderStatus, Priority, ServiceCategory } from "@/types/work-order";
 import type { WorkOrderWithRelations } from "@/types/work-order";
 import {
@@ -63,9 +63,15 @@ function formatDate(dateStr: string): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function WorkOrdersTable() {
+export interface WorkOrdersTableHandle {
+  refresh: () => void;
+}
+
+export const WorkOrdersTable = forwardRef<WorkOrdersTableHandle>(function WorkOrdersTable(_, ref) {
   const { data, error, loading, retry } = useApiQuery<WorkOrderWithRelations[]>("/api/work-orders");
   const workOrders = data ?? [];
+
+  useImperativeHandle(ref, () => ({ refresh: retry }), [retry]);
 
   const [statusFilter, setStatusFilter] = useState<WorkOrderStatus | "">("");
   const [categoryFilter, setCategoryFilter] = useState<ServiceCategory | "">("");
@@ -187,8 +193,26 @@ export function WorkOrdersTable() {
               return (
                 <TableRow key={wo.id}>
                   <TableCell>
-                    <span className="font-mono text-xs font-semibold text-slate-400">
-                      {wo.wo_number}
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs font-semibold text-slate-400">
+                        {wo.wo_number}
+                      </span>
+                      {wo.recurring_schedule_id && (
+                        <span
+                          title="Auto-generated from a recurring schedule"
+                          className="flex items-center justify-center rounded-full bg-brand-50 p-0.5 text-brand-500"
+                          aria-label="Recurring"
+                        >
+                          <RefreshCw className="h-2.5 w-2.5" />
+                        </span>
+                      )}
+                      {wo.ghl_sync_failed && (
+                        <span
+                          title="GHL sync failed — status not updated in GoHighLevel"
+                          className="flex h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                          aria-label="GHL sync failed"
+                        />
+                      )}
                     </span>
                   </TableCell>
 
@@ -253,4 +277,4 @@ export function WorkOrdersTable() {
       </Table>
     </div>
   );
-}
+});

@@ -10,7 +10,8 @@
 
 import type { Visit } from "@/types/visit";
 import { EstimateHandoffStatus } from "@/types/work-order";
-import { getWorkOrderById, updateWorkOrder } from "@/lib/mock-data/store";
+import { getWorkOrderById, updateWorkOrder } from "@/lib/db/queries/work-orders";
+import { markEstimateHandoffSentToGHL } from "@/lib/db/queries/estimate-handoffs";
 import { createTask } from "./client";
 
 // Default due date offset: 24 hours from task creation.
@@ -19,7 +20,7 @@ const DUE_DATE_OFFSET_MS = 24 * 60 * 60 * 1000;
 export async function syncEstimateToGhl(visit: Visit): Promise<void> {
   const tag = `[ghl/sync-estimate visit=${visit.id}]`;
 
-  const workOrder = getWorkOrderById(visit.work_order_id);
+  const workOrder = await getWorkOrderById(visit.work_order_id, visit.tenant_id);
   if (!workOrder) {
     console.error(`${tag} Work order "${visit.work_order_id}" not found — estimate sync skipped`);
     return;
@@ -54,9 +55,12 @@ export async function syncEstimateToGhl(visit: Visit): Promise<void> {
       `${tag} GHL task "${result.data.id}" created on opportunity ` +
       `${workOrder.ghl_opportunity_id} — setting estimate_handoff_status → SENT_TO_GHL`
     );
-    updateWorkOrder(workOrder.id, {
-      estimate_handoff_status: EstimateHandoffStatus.SENT_TO_GHL,
-    });
+    await Promise.all([
+      updateWorkOrder(workOrder.id, {
+        estimate_handoff_status: EstimateHandoffStatus.SENT_TO_GHL,
+      }, workOrder.tenant_id),
+      markEstimateHandoffSentToGHL(workOrder.id, workOrder.tenant_id, result.data.id),
+    ]);
     return;
   }
 

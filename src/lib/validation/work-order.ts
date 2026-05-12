@@ -93,6 +93,15 @@ export const PatchWorkOrderSchema = z.object({
   status: z.nativeEnum(WorkOrderStatus).optional(),
 
   estimate_handoff_status: z.nativeEnum(EstimateHandoffStatus).optional(),
+
+  retry_ghl_sync: z.boolean().optional(),
+
+  property_id: z
+    .string()
+    .uuid("Invalid property ID")
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v === "" ? undefined : v)),
 });
 
 export type PatchWorkOrderInput = z.infer<typeof PatchWorkOrderSchema>;

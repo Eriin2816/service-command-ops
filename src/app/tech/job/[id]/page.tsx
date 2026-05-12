@@ -61,6 +61,7 @@ export default async function TechJobDetailPage({ params }: Props) {
       property={undefined}
       initialChecklist={visit.checklist}
       visitId={visit.id}
+      initialPhotoPaths={visit.photo_urls}
     />
   );
 }

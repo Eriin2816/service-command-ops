@@ -1,4 +1,4 @@
-// Visit Types — Placeholder
+// Visit Types
 
 export enum VisitStatus {
   SCHEDULED = "scheduled",

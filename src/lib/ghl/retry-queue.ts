@@ -1,13 +1,9 @@
-// GHL outbound sync retry queue — placeholder implementation.
+// GHL outbound sync retry queue — in-memory implementation.
 //
-// In production this would be backed by a persistent store (a database table,
-// Redis list, or message broker) with a background worker that polls on a
-// schedule and re-attempts failed items with exponential backoff.
-//
-// For Phase 5 (mock / dev) items are kept in memory and logged. They survive
-// within a single warm server instance but are lost on restart. The queue is
-// intentionally read-only from outside this module so nothing else can mutate
-// the state accidentally.
+// Items survive within a single warm server instance but are lost on restart.
+// Before production: replace with a persistent store (Supabase ghl_sync_queue
+// table or Upstash QStash) with a background worker using exponential backoff.
+// The queue is intentionally read-only from outside this module.
 
 export type GHLSyncJobType = "opportunity_won" | "task_create";
 

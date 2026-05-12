@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
   FileText,
   Loader2,
   X,
+  ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -30,7 +31,22 @@ interface Props {
   property: PropertyWithRelations | undefined;
   initialChecklist: ChecklistItem[];
   visitId: string;
+  initialPhotoPaths?: string[];
 }
+
+// ─── Photo state ──────────────────────────────────────────────────────────────
+
+type PhotoStatus = "loading" | "uploading" | "done" | "error";
+
+interface PhotoItem {
+  localId: string;
+  displayUrl: string;   // blob URL (new) or signed URL (existing)
+  path: string;         // storage path; empty while uploading
+  status: PhotoStatus;
+  errorMsg?: string;
+}
+
+const MAX_PHOTOS = 10;
 
 // The page moves through a linear state machine.
 type Phase =
@@ -242,13 +258,123 @@ function EstimateScreen({ wo, summary }: { wo: WorkOrderWithRelations; summary: 
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function JobDetail({ wo, property, initialChecklist, visitId }: Props) {
-  const [checklist, setChecklist]       = useState<ChecklistItem[]>(initialChecklist);
-  const [notes, setNotes]               = useState("");
-  const [estimateNotes, setEstimateNotes] = useState("");
-  const [phase, setPhase]               = useState<Phase>("idle");
-  const [apiError, setApiError]         = useState<string | null>(null);
-  const [doneSummary, setDoneSummary]   = useState<DoneSummary | null>(null);
+export function JobDetail({ wo, property, initialChecklist, visitId, initialPhotoPaths = [] }: Props) {
+  const [checklist, setChecklist]           = useState<ChecklistItem[]>(initialChecklist);
+  const [notes, setNotes]                   = useState("");
+  const [estimateNotes, setEstimateNotes]   = useState("");
+  const [phase, setPhase]                   = useState<Phase>("idle");
+  const [apiError, setApiError]             = useState<string | null>(null);
+  const [doneSummary, setDoneSummary]       = useState<DoneSummary | null>(null);
+  const [photos, setPhotos]                 = useState<PhotoItem[]>([]);
+  const fileInputRef                        = useRef<HTMLInputElement>(null);
+
+  // ── Load existing photos on mount ────────────────────────────────────────
+
+  const loadExistingPhotos = useCallback(async () => {
+    if (initialPhotoPaths.length === 0) return;
+
+    // Pre-populate with loading placeholders
+    const loading: PhotoItem[] = initialPhotoPaths.map((path) => ({
+      localId: path,
+      displayUrl: "",
+      path,
+      status: "loading",
+    }));
+    setPhotos(loading);
+
+    try {
+      const res = await fetch(`/api/visits/${visitId}/photos`);
+      const json = (await res.json()) as { data?: { path: string; signedUrl: string }[]; error?: string };
+      if (json.data) {
+        setPhotos(
+          json.data.map((p) => ({
+            localId: p.path,
+            displayUrl: p.signedUrl,
+            path: p.path,
+            status: "done",
+          }))
+        );
+      }
+    } catch {
+      // Don't block the page — just clear the loading state
+      setPhotos([]);
+    }
+  }, [visitId, initialPhotoPaths]);
+
+  useEffect(() => { void loadExistingPhotos(); }, [loadExistingPhotos]);
+
+  // ── Photo upload ──────────────────────────────────────────────────────────
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Reset input so the same file can be re-selected after an error
+    e.target.value = "";
+    if (!file) return;
+
+    if (photos.length >= MAX_PHOTOS) return;
+
+    const localId = `new-${Date.now()}-${Math.random()}`;
+    const objectUrl = URL.createObjectURL(file);
+
+    setPhotos((prev) => [
+      ...prev,
+      { localId, displayUrl: objectUrl, path: "", status: "uploading" },
+    ]);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`/api/visits/${visitId}/photos`, {
+        method: "POST",
+        body: formData,
+      });
+      const json = (await res.json()) as { data?: { path: string; signedUrl: string }; error?: string };
+
+      if (!res.ok || !json.data) {
+        throw new Error(json.error ?? `Upload failed (${res.status})`);
+      }
+
+      setPhotos((prev) =>
+        prev.map((p) =>
+          p.localId === localId
+            ? { ...p, path: json.data!.path, status: "done" }
+            : p
+        )
+      );
+    } catch (err) {
+      URL.revokeObjectURL(objectUrl);
+      setPhotos((prev) =>
+        prev.map((p) =>
+          p.localId === localId
+            ? { ...p, status: "error", errorMsg: err instanceof Error ? err.message : "Upload failed" }
+            : p
+        )
+      );
+    }
+  }
+
+  async function handleRemovePhoto(photo: PhotoItem) {
+    if (photo.status === "uploading") return; // can't remove mid-upload
+
+    // Optimistically remove from UI
+    setPhotos((prev) => prev.filter((p) => p.localId !== photo.localId));
+    if (photo.displayUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(photo.displayUrl);
+    }
+
+    if (!photo.path) return; // upload failed before path was set — nothing in storage
+
+    try {
+      await fetch(`/api/visits/${visitId}/photos`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: photo.path }),
+      });
+    } catch {
+      // Silently accept — storage cleanup is best-effort
+    }
+  }
 
   const checkedCount  = checklist.filter((i) => i.completed).length;
   const totalCount    = checklist.length;
@@ -524,24 +650,91 @@ export function JobDetail({ wo, property, initialChecklist, visitId }: Props) {
 
         {/* Photos */}
         <div>
-          <SectionLabel>Photos</SectionLabel>
+          <div className="mb-3 flex items-center justify-between">
+            <SectionLabel>Photos</SectionLabel>
+            <span className="text-xs font-semibold text-slate-500">
+              {photos.filter((p) => p.status === "done").length}/{MAX_PHOTOS}
+            </span>
+          </div>
           <Card className="p-4">
-            <button
-              type="button"
+            {/* Hidden file input — triggers camera/gallery */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              className="sr-only"
+              onChange={handleFileChange}
               disabled={isLocked}
-              className={cn(
-                "flex w-full flex-col items-center gap-2.5 rounded-xl border-2 border-dashed border-slate-200 py-7",
-                "text-slate-400 transition-colors active:bg-slate-50",
-                "hover:border-brand-300 hover:text-brand-500",
-                "disabled:cursor-default disabled:opacity-60"
-              )}
-            >
-              <Camera className="h-7 w-7" />
-              <div className="text-center">
-                <p className="text-sm font-semibold">Add Photos</p>
-                <p className="mt-0.5 text-xs">Photo upload coming in a future phase</p>
+            />
+
+            {/* Thumbnail grid */}
+            {photos.length > 0 && (
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                {photos.map((photo) => (
+                  <div key={photo.localId} className="relative aspect-square">
+                    {photo.status === "loading" || photo.status === "uploading" ? (
+                      <div className="flex h-full w-full items-center justify-center rounded-xl bg-slate-100">
+                        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+                      </div>
+                    ) : photo.status === "error" ? (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-xl bg-red-50 px-1">
+                        <AlertTriangle className="h-4 w-4 text-red-400" />
+                        <p className="text-center text-[10px] leading-tight text-red-500">
+                          {photo.errorMsg ?? "Failed"}
+                        </p>
+                      </div>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={photo.displayUrl}
+                        alt="Job photo"
+                        className="h-full w-full rounded-xl object-cover"
+                      />
+                    )}
+
+                    {/* Remove button */}
+                    {!isLocked && photo.status !== "uploading" && photo.status !== "loading" && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePhoto(photo)}
+                        className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-white shadow active:opacity-70"
+                        aria-label="Remove photo"
+                      >
+                        <X className="h-3 w-3" strokeWidth={2.5} />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            </button>
+            )}
+
+            {/* Add photo button */}
+            {photos.filter((p) => p.status === "done" || p.status === "uploading").length < MAX_PHOTOS && (
+              <button
+                type="button"
+                disabled={isLocked}
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  "flex w-full items-center justify-center gap-2.5 rounded-xl border-2 border-dashed border-slate-200 py-5",
+                  "text-slate-400 transition-colors active:bg-slate-50",
+                  "hover:border-brand-300 hover:text-brand-500",
+                  "disabled:cursor-default disabled:opacity-60"
+                )}
+              >
+                <Camera className="h-5 w-5" />
+                <span className="text-sm font-semibold">
+                  {photos.length === 0 ? "Add Photos" : "Add Another"}
+                </span>
+              </button>
+            )}
+
+            {photos.filter((p) => p.status === "done" || p.status === "uploading").length >= MAX_PHOTOS && (
+              <div className="flex items-center justify-center gap-2 rounded-xl bg-slate-50 py-3">
+                <ImageIcon className="h-4 w-4 text-slate-400" />
+                <p className="text-xs text-slate-400">Maximum {MAX_PHOTOS} photos reached</p>
+              </div>
+            )}
           </Card>
         </div>
 

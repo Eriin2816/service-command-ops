@@ -1,23 +1,42 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { MOCK_PROPERTIES } from "@/lib/mock-data/properties";
-import { MOCK_WORK_ORDERS } from "@/lib/mock-data/work-orders";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth/config";
+import { getPropertyById } from "@/lib/db/queries/properties";
+import { listWorkOrders } from "@/lib/db/queries/work-orders";
 import { PropertyDetail } from "@/components/dashboard/PropertyDetail";
 
 type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const property = MOCK_PROPERTIES.find((p) => p.id === id);
-  return { title: property ? `${property.customer_name} — Property` : "Property Not Found" };
+  const session = await getServerSession(authOptions);
+  const tenantId = (session?.user as Record<string, string> | undefined)?.tenant_id;
+  try {
+    const property = await getPropertyById(id, tenantId);
+    return { title: property ? `${property.customer_name} — Property` : "Property Not Found" };
+  } catch {
+    return { title: "Property" };
+  }
 }
 
 export default async function PropertyDetailPage({ params }: Props) {
   const { id } = await params;
-  const property = MOCK_PROPERTIES.find((p) => p.id === id);
+  const session = await getServerSession(authOptions);
+  const tenantId = (session?.user as Record<string, string> | undefined)?.tenant_id;
+
+  let property, relatedWorkOrders;
+  try {
+    [property, relatedWorkOrders] = await Promise.all([
+      getPropertyById(id, tenantId),
+      listWorkOrders({ tenant_id: tenantId, property_id: id }),
+    ]);
+  } catch (err) {
+    console.error("[page] PropertyDetailPage failed:", err);
+    notFound();
+  }
+
   if (!property) notFound();
 
-  const relatedWorkOrders = MOCK_WORK_ORDERS.filter((wo) => wo.property_id === id);
-
-  return <PropertyDetail property={property} relatedWorkOrders={relatedWorkOrders} />;
+  return <PropertyDetail property={property} relatedWorkOrders={relatedWorkOrders ?? []} />;
 }

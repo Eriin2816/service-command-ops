@@ -61,6 +61,8 @@ export interface WorkOrder {
   /** Set true when an outbound GHL sync attempt failed after all retries.
    *  Cleared automatically if a subsequent sync succeeds. */
   ghl_sync_failed?: boolean;
+  /** Set on WOs auto-generated from a recurring schedule; null on manual WOs. */
+  recurring_schedule_id?: string;
   created_at: string;
   updated_at: string;
 }

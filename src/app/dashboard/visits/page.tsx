@@ -19,7 +19,7 @@ export default function VisitsPage() {
       <EmptyState
         icon={CalendarCheck}
         title="No visits yet"
-        description="Recurring service schedules and visit history coming in Phase 3."
+        description="Visit history is recorded through the technician job flow. An admin visit history view is coming in a future update."
       />
     </div>
   );

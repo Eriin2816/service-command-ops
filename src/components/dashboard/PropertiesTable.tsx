@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, forwardRef, useImperativeHandle } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -39,8 +39,14 @@ type ActiveFilter = "all" | "active" | "inactive";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function PropertiesTable() {
+export interface PropertiesTableHandle {
+  refresh: () => void;
+}
+
+export const PropertiesTable = forwardRef<PropertiesTableHandle>(function PropertiesTable(_, ref) {
   const { data, error, loading, retry } = useApiQuery<PropertyWithRelations[]>("/api/properties");
+
+  useImperativeHandle(ref, () => ({ refresh: retry }), [retry]);
   const properties = data ?? [];
 
   const [search, setSearch] = useState("");
@@ -282,4 +288,4 @@ export function PropertiesTable() {
       </Table>
     </div>
   );
-}
+})

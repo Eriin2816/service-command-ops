@@ -1,8 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Menu, Bell } from "lucide-react";
+import { Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NotificationDropdown } from "./NotificationDropdown";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard/overview":    "Overview",
@@ -57,19 +58,7 @@ export function TopBar({ onMenuClick }: TopBarProps) {
       {/* Right side actions */}
       <div className="ml-auto flex items-center gap-2">
         {/* Notification bell */}
-        <button
-          type="button"
-          className={cn(
-            "relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-500",
-            "transition-colors hover:bg-slate-100 hover:text-slate-900",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-          )}
-          aria-label="Notifications"
-        >
-          <Bell className="h-4 w-4" />
-          {/* Unread dot — placeholder */}
-          <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-amber-500" />
-        </button>
+        <NotificationDropdown />
 
         {/* User avatar */}
         <div className="flex items-center gap-2.5">

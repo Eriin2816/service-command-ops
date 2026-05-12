@@ -13,12 +13,6 @@ export interface PriorityOption {
   urgencyHint: string;
 }
 
-export interface TechnicianOption {
-  id: string;
-  name: string;
-  initials: string;
-}
-
 export const serviceTypes: ServiceTypeConfig[] = [
   { value: ServiceCategory.WEEKLY_POOL_MAINTENANCE,    label: "Weekly Pool Maintenance",      description: "Regular weekly pool cleaning and chemical balancing",          estimatedDurationMinutes: 60  },
   { value: ServiceCategory.POOL_REPAIR,                label: "Pool Repair",                  description: "Equipment repair, leak fix, or structural repair",              estimatedDurationMinutes: 120 },
@@ -39,8 +33,4 @@ export const PRIORITY_OPTIONS: PriorityOption[] = [
   { value: Priority.URGENT, label: "Urgent", urgencyHint: "Same-day"  },
 ];
 
-// Placeholder technicians — replace with DB query in Phase 4
-export const MOCK_TECHNICIANS: TechnicianOption[] = [
-  { id: "tech-001", name: "Carlos M.", initials: "C" },
-  { id: "tech-002", name: "Sarah K.",  initials: "S" },
-];
+;

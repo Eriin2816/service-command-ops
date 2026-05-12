@@ -1,5 +1,4 @@
 // ServiceOps Type Exports
-// All types are placeholders — implement fully in Phase 2+
 
 export * from "./work-order";
 export * from "./property";

@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
 
   const rawStatus   = searchParams.get("status")   ?? undefined;
   const rawCategory = searchParams.get("category") ?? undefined;
+  const rawEstimate = searchParams.get("estimate") ?? undefined;
 
   if (rawStatus !== undefined && !Object.values(WorkOrderStatus).includes(rawStatus as WorkOrderStatus)) {
     return NextResponse.json(
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
       status:        rawStatus as WorkOrderStatus | undefined,
       category:      rawCategory,
       technician_id: technicianIdFilter,
+      estimate:      rawEstimate === "true",
     });
     return NextResponse.json({ data: workOrders, total: workOrders.length });
   } catch (err) {

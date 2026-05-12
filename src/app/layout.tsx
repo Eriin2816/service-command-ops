@@ -21,6 +21,13 @@ export const metadata: Metadata = {
     template: "%s | ServiceOps",
   },
   description: "GHL-integrated work order and field operations platform",
+  manifest: "/manifest.json",
+  themeColor: "#06B6D4",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ServiceOps",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
