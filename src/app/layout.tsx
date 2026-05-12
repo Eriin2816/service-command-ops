@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Sora } from "next/font/google";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import "@/styles/globals.css";
@@ -22,12 +22,15 @@ export const metadata: Metadata = {
   },
   description: "GHL-integrated work order and field operations platform",
   manifest: "/manifest.json",
-  themeColor: "#06B6D4",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "ServiceOps",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#06B6D4",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
