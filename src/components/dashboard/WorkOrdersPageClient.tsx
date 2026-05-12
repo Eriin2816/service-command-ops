@@ -1,20 +1,34 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CheckCircle2, Plus, X } from "lucide-react";
+import { CheckCircle2, Plus, X, Trash2, AlertCircle } from "lucide-react";
 import { NewWorkOrderModal } from "./NewWorkOrderModal";
 import { WorkOrdersTable, type WorkOrdersTableHandle } from "./WorkOrdersTable";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 
+type Toast = { type: "success" | "error" | "deleted"; message: string };
+
 export function WorkOrdersPageClient() {
   const [isOpen, setIsOpen] = useState(false);
-  const [successBanner, setSuccessBanner] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   const tableRef = useRef<WorkOrdersTableHandle>(null);
 
+  function showToast(t: Toast, durationMs = 6000) {
+    setToast(t);
+    setTimeout(() => setToast(null), durationMs);
+  }
+
   function handleSuccess(woNumber: string) {
-    setSuccessBanner(woNumber);
     tableRef.current?.refresh();
-    setTimeout(() => setSuccessBanner(null), 6000);
+    showToast({ type: "success", message: `${woNumber} created successfully` });
+  }
+
+  function handleDeleteSuccess(woNumber: string) {
+    showToast({ type: "deleted", message: `Work order ${woNumber} deleted` });
+  }
+
+  function handleDeleteError() {
+    showToast({ type: "error", message: "Failed to delete. Please try again." }, 8000);
   }
 
   return (
@@ -39,17 +53,23 @@ export function WorkOrdersPageClient() {
         </button>
       </div>
 
-      {/* Success banner */}
-      {successBanner && (
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-          <span>
-            <span className="font-semibold">{successBanner}</span> created successfully
-          </span>
+      {/* Toast banner */}
+      {toast && (
+        <div className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+          toast.type === "success"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+            : toast.type === "deleted"
+            ? "border-slate-200 bg-slate-50 text-slate-700"
+            : "border-red-200 bg-red-50 text-red-800"
+        }`}>
+          {toast.type === "success" && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />}
+          {toast.type === "deleted" && <Trash2 className="h-4 w-4 shrink-0 text-slate-400" />}
+          {toast.type === "error"   && <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />}
+          <span className="font-medium">{toast.message}</span>
           <button
             type="button"
-            onClick={() => setSuccessBanner(null)}
-            className="ml-auto rounded p-0.5 hover:bg-emerald-100"
+            onClick={() => setToast(null)}
+            className="ml-auto rounded p-0.5 opacity-60 hover:opacity-100"
             aria-label="Dismiss"
           >
             <X className="h-3.5 w-3.5" />
@@ -58,7 +78,11 @@ export function WorkOrdersPageClient() {
       )}
 
       {/* Table */}
-      <WorkOrdersTable ref={tableRef} />
+      <WorkOrdersTable
+        ref={tableRef}
+        onDeleteSuccess={handleDeleteSuccess}
+        onDeleteError={handleDeleteError}
+      />
 
       {/* Modal */}
       <NewWorkOrderModal
