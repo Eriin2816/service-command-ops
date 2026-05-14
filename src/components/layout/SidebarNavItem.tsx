@@ -61,7 +61,15 @@ export function SidebarNavItem({ item, collapsed = false }: SidebarNavItemProps)
         )}
       />
       {!collapsed && (
-        <span className="truncate">{item.label}</span>
+        <>
+          <span className="truncate">{item.label}</span>
+          {item.href === '/dashboard/reports' &&
+            process.env.NEXT_PUBLIC_REPORTING_MODE === 'mock' && (
+              <span className="ml-auto shrink-0 rounded-full border border-amber-600/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wide text-amber-400">
+                demo
+              </span>
+            )}
+        </>
       )}
     </Link>
   );

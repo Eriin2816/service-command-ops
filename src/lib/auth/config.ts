@@ -17,7 +17,7 @@ export const authOptions: NextAuthOptions = {
 
         const { data: user, error } = await supabaseAdmin
           .from("users")
-          .select("id, email, password_hash, name, role, tenant_id, is_active")
+          .select("id, email, password_hash, name, role, tenant_id, is_active, avatar_url")
           .eq("email", credentials.email.toLowerCase())
           .eq("is_active", true)
           .single();
@@ -46,6 +46,7 @@ export const authOptions: NextAuthOptions = {
           tenant_id: user.tenant_id,
           // For TECHNICIAN role, the user ID IS the technician ID in this schema
           technician_id: user.role === UserRole.TECHNICIAN ? user.id : undefined,
+          avatar_url: user.avatar_url ?? null,
         };
       },
     }),
@@ -63,6 +64,7 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role;
         token.tenant_id = user.tenant_id;
         token.technician_id = user.technician_id;
+        token.avatar_url = user.avatar_url ?? null;
       }
       return token;
     },
@@ -71,6 +73,7 @@ export const authOptions: NextAuthOptions = {
       session.user.role = token.role;
       session.user.tenant_id = token.tenant_id;
       session.user.technician_id = token.technician_id;
+      session.user.avatar_url = token.avatar_url ?? null;
       return session;
     },
   },

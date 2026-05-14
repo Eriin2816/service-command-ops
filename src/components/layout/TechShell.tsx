@@ -1,4 +1,5 @@
 import { Droplets } from "lucide-react";
+import { InstallPromptBanner } from "./InstallPromptBanner";
 
 interface TechShellProps {
   children: React.ReactNode;
@@ -32,6 +33,8 @@ export function TechShell({ children }: TechShellProps) {
           </div>
         </div>
       </header>
+
+      <InstallPromptBanner />
 
       {/* Page content */}
       <main className="flex-1">{children}</main>

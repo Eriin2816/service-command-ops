@@ -15,6 +15,7 @@ declare module "next-auth" {
       tenant_id: string;
       /** Work-order-store technician record ID (e.g. "tech-001"). Only set for TECHNICIAN role. */
       technician_id?: string;
+      avatar_url?: string | null;
     };
   }
 
@@ -23,6 +24,7 @@ declare module "next-auth" {
     role: UserRole;
     tenant_id: string;
     technician_id?: string;
+    avatar_url?: string | null;
   }
 }
 
@@ -32,5 +34,6 @@ declare module "next-auth/jwt" {
     role: UserRole;
     tenant_id: string;
     technician_id?: string;
+    avatar_url?: string | null;
   }
 }
