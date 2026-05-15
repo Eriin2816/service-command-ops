@@ -1,15 +1,25 @@
+"use client";
+
 import { Droplets } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { adminNavItems } from "@/config/navigation";
 import { SidebarNavItem } from "./SidebarNavItem";
+import type { UserRole } from "@/types/technician";
 
 interface SidebarProps {
   className?: string;
 }
 
-const mainNavItems = adminNavItems.filter((item) => !item.pinBottom);
-const bottomNavItems = adminNavItems.filter((item) => item.pinBottom);
-
 export function Sidebar({ className }: SidebarProps) {
+  const { data: session } = useSession();
+  const userRole = session?.user?.role as UserRole | undefined;
+
+  const visibleItems = userRole
+    ? adminNavItems.filter((item) => item.roles.includes(userRole))
+    : [];
+
+  const mainNavItems = visibleItems.filter((item) => !item.pinBottom);
+  const bottomNavItems = visibleItems.filter((item) => item.pinBottom);
   return (
     <aside
       className={`flex h-full w-60 flex-col ${className ?? ""}`}
