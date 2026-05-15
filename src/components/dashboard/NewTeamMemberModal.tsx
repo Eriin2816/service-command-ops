@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { AlertCircle, CheckCircle2, Loader2, Mail, X } from 'lucide-react'
+import { AlertCircle, Loader2, Mail, X } from 'lucide-react'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { ASSIGNABLE_ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS, type TeamMemberRole } from '@/types/team'
@@ -127,7 +127,7 @@ export function NewTeamMemberModal({ open, onClose, onSuccess }: Props) {
         <div className="flex items-start justify-between border-b border-border px-6 py-4">
           <div>
             <h2 className="font-display text-lg font-bold text-slate-900">Invite Team Member</h2>
-            <p className="mt-0.5 text-sm text-slate-500">They'll receive an email to set their own password</p>
+            <p className="mt-0.5 text-sm text-slate-500">They&apos;ll receive an email to set their own password</p>
           </div>
           <button
             type="button"
@@ -149,7 +149,7 @@ export function NewTeamMemberModal({ open, onClose, onSuccess }: Props) {
               <div>
                 <p className="font-display text-lg font-bold text-slate-900">Invitation sent!</p>
                 <p className="mt-1 text-sm font-semibold text-brand-600">{successName}</p>
-                <p className="mt-1 text-sm text-slate-500">They'll receive an email to set their password and activate their account.</p>
+                <p className="mt-1 text-sm text-slate-500">They&apos;ll receive an email to set their password and activate their account.</p>
               </div>
             </div>
           ) : (
@@ -236,7 +236,7 @@ export function NewTeamMemberModal({ open, onClose, onSuccess }: Props) {
               <div className="flex items-start gap-2.5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
                 <Mail className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
                 <p className="text-xs text-blue-700 leading-relaxed">
-                  A secure invite link will be emailed to <strong>{values.email || 'the address above'}</strong>. They'll set their own password when they accept. The link expires in 7 days.
+                  A secure invite link will be emailed to <strong>{values.email || 'the address above'}</strong>. They&apos;ll set their own password when they accept. The link expires in 7 days.
                 </p>
               </div>
             </form>
