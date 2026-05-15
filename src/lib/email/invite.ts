@@ -2,7 +2,7 @@ import { resend } from './client'
 import { ROLE_LABELS, type TeamMemberRole } from '@/types/team'
 
 const APP_URL = process.env.NEXTAUTH_URL ?? 'https://serviceops-ghl-workorders.vercel.app'
-const FROM_ADDRESS = 'ServiceOps <no-reply@serviceops.app>'
+const FROM_ADDRESS = 'ServiceOps <onboarding@resend.dev>'
 
 export async function sendInviteEmail(
   to: string,
