@@ -55,7 +55,7 @@ export const adminNavItems: NavItem[] = [
     label: "Reports",
     href: "/dashboard/reports",
     icon: "BarChart2",
-    roles: [UserRole.PLATFORM_OWNER, UserRole.TENANT_ADMIN, UserRole.READ_ONLY_OWNER],
+    roles: [UserRole.PLATFORM_OWNER, UserRole.TENANT_ADMIN, UserRole.OFFICE_STAFF, UserRole.READ_ONLY_OWNER],
   },
   {
     label: "Settings",

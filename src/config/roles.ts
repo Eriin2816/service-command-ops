@@ -43,7 +43,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canAssignTechnicians: true,
     canViewAllProperties: true,
     canEditProperties: true,
-    canViewReports: false,
+    canViewReports: true,
     canManageSettings: false,
     canManageTenants: false,
     canViewOwnJobsOnly: false,
