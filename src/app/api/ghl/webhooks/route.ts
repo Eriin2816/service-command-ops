@@ -1,9 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
-import type { GHLWebhookPayload } from "@/types/ghl";
-import { createWorkOrderFromGHL } from "@/lib/ghl/create-work-order-from-ghl";
+import type {
+  GHLWebhookPayload,
+  GHLOpportunityStatusChangePayload,
+} from "@/types/ghl";
 import { upsertPropertyFromGHL } from "@/lib/ghl/upsert-property-from-ghl";
 import { createWorkOrderFromAppointment } from "@/lib/ghl/create-work-order-from-appointment";
+import {
+  createWorkOrderFromGHLStage,
+  updateWorkOrderStatusByGHLOpportunity,
+  flagEstimateFromGHL,
+} from "@/lib/ghl/work-order-factory";
+import {
+  STAGES_THAT_CREATE_WORK_ORDER,
+  STAGES_THAT_UPDATE_STATUS,
+  STAGES_THAT_FLAG_ESTIMATE,
+} from "@/lib/constants/ghl-pipeline";
+import { resolveTenantId } from "@/lib/ghl/tenant-config";
 
 // ---------------------------------------------------------------------------
 // Signature verification
@@ -23,7 +36,6 @@ function verifySignature(rawBody: string, signatureHeader: string, secret: strin
 
   const expectedBuf = Buffer.from(expected, "hex");
 
-  // timingSafeEqual requires equal-length buffers
   if (incomingBuf.length !== expectedBuf.length) return false;
 
   try {
@@ -38,8 +50,6 @@ function verifySignature(rawBody: string, signatureHeader: string, secret: strin
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
-  // Read raw body first — must happen before any JSON parsing so the HMAC is
-  // computed over the exact bytes GHL sent.
   let rawBody: string;
   try {
     rawBody = await request.text();
@@ -51,12 +61,10 @@ export async function POST(request: NextRequest) {
   const secret = process.env.GHL_WEBHOOK_SECRET;
 
   if (!secret) {
-    // Block all requests in production if the secret is not configured.
     if (process.env.NODE_ENV === "production") {
       console.error("[ghl/webhooks] GHL_WEBHOOK_SECRET is not set — rejecting request in production");
       return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
     }
-    // Dev/test mode only — accept without verification.
     console.warn("[ghl/webhooks] GHL_WEBHOOK_SECRET not set — signature verification skipped (dev mode)");
   } else {
     const signatureHeader = request.headers.get("x-ghl-signature") ?? "";
@@ -75,7 +83,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  // ── Log ────────────────────────────────────────────────────────────────────
   console.log(
     "[ghl/webhooks] Received event | type=%s locationId=%s",
     payload.type,
@@ -84,7 +91,6 @@ export async function POST(request: NextRequest) {
 
   // ── Dispatch ───────────────────────────────────────────────────────────────
   // Fire-and-forget — always return 200 after verification so GHL doesn't retry.
-  // Processing errors are logged server-side; duplicates prevented by idempotency check.
   void dispatch(payload).catch((err) => {
     console.error("[ghl/webhooks] Unhandled dispatch error:", err);
   });
@@ -98,26 +104,76 @@ export async function POST(request: NextRequest) {
 
 async function dispatch(payload: GHLWebhookPayload): Promise<void> {
   switch (payload.type) {
+
     case "OpportunityStatusChange": {
-      const result = await createWorkOrderFromGHL(payload);
-      switch (result.outcome) {
-        case "created":
-          console.log(
-            `[ghl/webhooks] OpportunityStatusChange → created WorkOrder ${result.workOrder.wo_number}`
-          );
-          break;
-        case "already_exists":
-          console.log(
-            `[ghl/webhooks] OpportunityStatusChange → idempotent, existing WorkOrder ${result.workOrder.wo_number}`
-          );
-          break;
-        case "skipped":
-          console.log(`[ghl/webhooks] OpportunityStatusChange → skipped: ${result.reason}`);
-          break;
-        case "error":
-          console.error(`[ghl/webhooks] OpportunityStatusChange → error: ${result.reason}`);
-          break;
+      const opp = payload as GHLOpportunityStatusChangePayload;
+
+      // Resolve tenant first — required for all stage handlers
+      const tenantId = resolveTenantId(opp.locationId);
+      if (!tenantId) {
+        console.error(
+          `[ghl/webhooks] OpportunityStatusChange — unknown locationId "${opp.locationId}". Discarding.`
+        );
+        break;
       }
+
+      // Discard terminal non-job statuses
+      if (opp.status === "lost" || opp.status === "abandoned") {
+        console.log(`[ghl/webhooks] OpportunityStatusChange — status="${opp.status}", discarding.`);
+        break;
+      }
+
+      const stageName = (opp.pipelineStage?.name ?? "").trim();
+      const stageNorm = stageName.toLowerCase();
+
+      // ── CREATE: Diagnosis Booked or Estimate Approved ──────────────────────
+      if (STAGES_THAT_CREATE_WORK_ORDER.some((s) => s.toLowerCase() === stageNorm)) {
+        const result = await createWorkOrderFromGHLStage(opp, stageName, tenantId);
+        switch (result.outcome) {
+          case "created":
+            console.log(
+              `[ghl/webhooks] Stage "${stageName}" → created WO ${result.workOrder.wo_number}`
+            );
+            break;
+          case "already_exists":
+            console.log(
+              `[ghl/webhooks] Stage "${stageName}" → idempotent, existing WO ${result.workOrder.wo_number}`
+            );
+            break;
+          case "skipped":
+            console.log(`[ghl/webhooks] Stage "${stageName}" → skipped: ${result.reason}`);
+            break;
+          case "error":
+            console.error(`[ghl/webhooks] Stage "${stageName}" → error: ${result.reason}`);
+            break;
+        }
+        break;
+      }
+
+      // ── UPDATE STATUS: Diagnosis Completed, In Progress, Completed/Won ─────
+      const updateStatusValue = Object.entries(STAGES_THAT_UPDATE_STATUS).find(
+        ([k]) => k.toLowerCase() === stageNorm
+      )?.[1];
+
+      if (updateStatusValue) {
+        await updateWorkOrderStatusByGHLOpportunity(opp.id, updateStatusValue, stageName, tenantId);
+        break;
+      }
+
+      // Fallback: GHL top-level "won" without a matching stage → mark completed
+      if (opp.status === "won") {
+        await updateWorkOrderStatusByGHLOpportunity(opp.id, "completed", "won", tenantId);
+        break;
+      }
+
+      // ── FLAG ESTIMATE: Estimate Sent ───────────────────────────────────────
+      if (STAGES_THAT_FLAG_ESTIMATE.some((s) => s.toLowerCase() === stageNorm)) {
+        await flagEstimateFromGHL(opp.id, tenantId);
+        break;
+      }
+
+      // All other stages — no action
+      console.log(`[ghl/webhooks] Stage "${stageName}" — no action configured`);
       break;
     }
 
@@ -150,12 +206,12 @@ async function dispatch(payload: GHLWebhookPayload): Promise<void> {
       switch (result.outcome) {
         case "created":
           console.log(
-            `[ghl/webhooks] AppointmentBooked → created WorkOrder ${result.workOrder.wo_number}`
+            `[ghl/webhooks] AppointmentBooked → created WO ${result.workOrder.wo_number}`
           );
           break;
         case "already_exists":
           console.log(
-            `[ghl/webhooks] AppointmentBooked → idempotent, existing WorkOrder ${result.workOrder.wo_number}`
+            `[ghl/webhooks] AppointmentBooked → idempotent, existing WO ${result.workOrder.wo_number}`
           );
           break;
         case "skipped":

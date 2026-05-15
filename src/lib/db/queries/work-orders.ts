@@ -62,6 +62,7 @@ type WoJoinedRow = {
   estimate_notes: string | null;
   ghl_sync_failed: boolean;
   recurring_schedule_id: string | null;
+  ghl_trigger_stage: string | null;
   created_at: string;
   updated_at: string;
   // Embedded joins
@@ -92,6 +93,7 @@ function mapRow(row: WoJoinedRow): WorkOrderWithRelations {
     estimate_notes:         nullToUndef(row.estimate_notes),
     ghl_sync_failed:        row.ghl_sync_failed || undefined,
     recurring_schedule_id:  nullToUndef(row.recurring_schedule_id),
+    ghl_trigger_stage:      nullToUndef(row.ghl_trigger_stage),
     created_at:             row.created_at,
     updated_at:             row.updated_at,
     // Computed relation fields
@@ -239,6 +241,7 @@ export async function createWorkOrderFull(
     property_id: string;
     ghl_contact_id?: string;
     ghl_opportunity_id?: string;
+    ghl_trigger_stage?: string;
     title: string;
     description?: string;
     status?: WorkOrderStatus;
@@ -262,6 +265,7 @@ export async function createWorkOrderFull(
       property_id:            input.property_id,
       ghl_contact_id:         input.ghl_contact_id ?? null,
       ghl_opportunity_id:     input.ghl_opportunity_id ?? null,
+      ghl_trigger_stage:      input.ghl_trigger_stage ?? null,
       title:                  input.title,
       description:            input.description ?? null,
       status:                 input.status ?? WorkOrderStatus.NEW,
@@ -365,6 +369,76 @@ export async function updateWorkOrder(
 
   if (error) throw new Error(`[db] updateWorkOrder update: ${error.message}`);
   return { ok: true, data: mapRow(data as unknown as WoJoinedRow) };
+}
+
+// ---------------------------------------------------------------------------
+// findByGhlOpportunityIdAndStage — per-stage idempotency guard for webhook intake
+// Allows two WOs for the same opportunity (e.g. Diagnosis Booked + Estimate Approved).
+// ---------------------------------------------------------------------------
+
+export async function findByGhlOpportunityIdAndStage(
+  ghlOpportunityId: string,
+  triggerStage: string,
+  tenantId: string
+): Promise<WorkOrderWithRelations | undefined> {
+  const { data, error } = await db
+    .from("work_orders")
+    .select(WO_SELECT)
+    .eq("ghl_opportunity_id", ghlOpportunityId)
+    .eq("ghl_trigger_stage", triggerStage)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (error) throw new Error(`[db] findByGhlOpportunityIdAndStage: ${error.message}`);
+  if (!data) return undefined;
+  return mapRow(data as unknown as WoJoinedRow);
+}
+
+// ---------------------------------------------------------------------------
+// findOpenByGhlOpportunityId — finds the most recently created non-terminal WO
+// for a GHL opportunity. Used by status-update handlers (Diagnosis Completed,
+// In Progress, Completed/Won) to find the right WO to patch.
+// ---------------------------------------------------------------------------
+
+export async function findOpenByGhlOpportunityId(
+  ghlOpportunityId: string,
+  tenantId: string
+): Promise<WorkOrderWithRelations | undefined> {
+  const { data, error } = await db
+    .from("work_orders")
+    .select(WO_SELECT)
+    .eq("ghl_opportunity_id", ghlOpportunityId)
+    .eq("tenant_id", tenantId)
+    .not("status", "in", `(${WorkOrderStatus.CANCELLED},${WorkOrderStatus.COMPLETED})`)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`[db] findOpenByGhlOpportunityId: ${error.message}`);
+  if (!data) return undefined;
+  return mapRow(data as unknown as WoJoinedRow);
+}
+
+// ---------------------------------------------------------------------------
+// findAnyByGhlOpportunityId — finds any WO for a GHL opportunity regardless
+// of status. Used by flagEstimateFromGHL where the WO may already be completed.
+// ---------------------------------------------------------------------------
+
+export async function findAnyByGhlOpportunityId(
+  ghlOpportunityId: string,
+  tenantId: string
+): Promise<WorkOrderWithRelations | undefined> {
+  const { data, error } = await db
+    .from("work_orders")
+    .select(WO_SELECT)
+    .eq("ghl_opportunity_id", ghlOpportunityId)
+    .eq("ghl_trigger_stage", "Diagnosis Booked")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (error) throw new Error(`[db] findAnyByGhlOpportunityId: ${error.message}`);
+  if (!data) return undefined;
+  return mapRow(data as unknown as WoJoinedRow);
 }
 
 // ---------------------------------------------------------------------------

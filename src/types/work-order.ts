@@ -64,6 +64,8 @@ export interface WorkOrder {
   ghl_sync_failed?: boolean;
   /** Set on WOs auto-generated from a recurring schedule; null on manual WOs. */
   recurring_schedule_id?: string;
+  /** GHL pipeline stage name that triggered this work order's creation (e.g. "Diagnosis Booked"). */
+  ghl_trigger_stage?: string;
   created_at: string;
   updated_at: string;
 }
