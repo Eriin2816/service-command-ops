@@ -1,0 +1,89 @@
+import { type NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import bcrypt from 'bcryptjs'
+import { requirePermission, getTenantId } from '@/lib/auth/api-auth'
+import { db } from '@/lib/db/client'
+import type { TeamMember } from '@/types/team'
+
+const TEAM_ROLES = ['tenant_admin', 'office_staff', 'read_only_owner'] as const
+
+const PatchTeamMemberSchema = z.object({
+  name:         z.string().min(2).max(120).transform(v => v.trim()).optional(),
+  email:        z.string().email().transform(v => v.toLowerCase().trim()).optional(),
+  phone:        z.string().max(30).transform(v => v.trim()).nullable().optional(),
+  role:         z.enum(TEAM_ROLES).optional(),
+  is_active:    z.boolean().optional(),
+  new_password: z.string().min(8).max(128).optional(),
+})
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await requirePermission('canManageSettings')
+  if (!auth.ok) return auth.response
+  const tenantId = getTenantId(auth.session)
+  const { id } = await params
+
+  let body: unknown
+  try { body = await request.json() } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const result = PatchTeamMemberSchema.safeParse(body)
+  if (!result.success) {
+    return NextResponse.json(
+      { error: 'Validation failed', issues: result.error.flatten().fieldErrors },
+      { status: 422 }
+    )
+  }
+
+  const { data: existing } = await db
+    .from('users')
+    .select('id, email, role')
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .not('role', 'eq', 'technician')
+    .maybeSingle()
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Team member not found' }, { status: 404 })
+  }
+
+  const { name, email, phone, role, is_active, new_password } = result.data
+
+  if (email && email !== existing.email) {
+    const { data: conflict } = await db
+      .from('users')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('email', email)
+      .maybeSingle()
+    if (conflict) {
+      return NextResponse.json({ error: 'A user with that email already exists' }, { status: 409 })
+    }
+  }
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (name !== undefined) updates.name = name
+  if (email !== undefined) updates.email = email
+  if (phone !== undefined) updates.phone = phone
+  if (role !== undefined) updates.role = role
+  if (is_active !== undefined) updates.is_active = is_active
+  if (new_password) updates.password_hash = await bcrypt.hash(new_password, 12)
+
+  const { data: updated, error: updateError } = await db
+    .from('users')
+    .update(updates)
+    .eq('id', id)
+    .eq('tenant_id', tenantId)
+    .select('id, tenant_id, name, email, phone, role, is_active, created_at')
+    .single()
+
+  if (updateError) {
+    console.error('[api] PATCH /api/team/[id] failed:', updateError)
+    return NextResponse.json({ error: 'Failed to update team member' }, { status: 500 })
+  }
+
+  return NextResponse.json({ data: updated as TeamMember })
+}
