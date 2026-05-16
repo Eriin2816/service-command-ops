@@ -147,9 +147,9 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       font-size: 14px;
       color: #1e293b;
       background: white;
-      padding: 40px;
-      max-width: 800px;
-      margin: 0 auto;
+      padding: 32px 40px;
+      max-width: 750px;
+      margin: 0;
     }
     @media print {
       body { padding: 20px; }

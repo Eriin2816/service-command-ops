@@ -10,19 +10,21 @@ export async function downloadReportAsPDF(
   ]);
 
   const container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.top = "-99999px";
-  container.style.left = "-99999px";
+  container.style.position = "absolute";
+  container.style.top = "0";
+  container.style.left = "0";
+  container.style.zIndex = "-9999";
+  container.style.pointerEvents = "none";
+  container.style.opacity = "0";
   container.style.width = "794px"; // A4 at 96 dpi
   container.style.backgroundColor = "white";
   container.style.padding = "0";
   container.style.margin = "0";
-  container.style.zIndex = "-1";
   container.innerHTML = htmlContent;
   document.body.appendChild(container);
 
   // Give fonts/layout time to settle
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 800));
 
   try {
     // Hide the "Print / Save as PDF" button that's only for standalone HTML view
@@ -35,27 +37,35 @@ export async function downloadReportAsPDF(
       logging: false,
       backgroundColor: "#ffffff",
       width: 794,
+      height: container.scrollHeight,
       windowWidth: 794,
+      windowHeight: container.scrollHeight,
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
     });
-
-    const imgWidth = 210; // A4 mm
-    const pageHeight = 297;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-    const imgData = canvas.toDataURL("image/png", 1.0);
-    let position = 0;
-    let heightLeft = imgHeight;
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
 
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+    const imgWidth = pdfWidth;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+    const imgData = canvas.toDataURL("image/png", 1.0);
+
+    let heightLeft = imgHeight;
+    let position = 0;
+    let pageNumber = 0;
 
     while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      if (pageNumber > 0) pdf.addPage();
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight, undefined, "FAST");
+      heightLeft -= pdfHeight;
+      position -= pdfHeight;
+      pageNumber++;
     }
 
     pdf.save(filename);
