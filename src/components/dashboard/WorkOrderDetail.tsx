@@ -381,18 +381,24 @@ export function WorkOrderDetail({
     try {
       const res = await fetch(`/api/work-orders/${workOrder.id}/report`);
       if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string; detail?: string };
-        throw new Error(j.detail ?? j.error ?? "Report generation failed");
+        const contentType = res.headers.get("Content-Type") ?? "";
+        let detail = `Server error: ${res.status}`;
+        if (contentType.includes("application/json")) {
+          const j = (await res.json().catch(() => ({}))) as { error?: string; detail?: string };
+          detail = j.detail ?? j.error ?? detail;
+        }
+        throw new Error(detail);
       }
-      const htmlContent = await res.text();
-      if (!htmlContent || htmlContent.length < 100) {
-        throw new Error("Empty report received from server");
-      }
-      const { downloadReportAsPDF } = await import("@/lib/utils/generate-pdf");
-      await downloadReportAsPDF(
-        htmlContent,
-        `ServiceOps-${workOrder.wo_number}-Report.pdf`
-      );
+      const blob = await res.blob();
+      if (blob.size < 100) throw new Error("PDF was empty — please try again");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ServiceOps-${workOrder.wo_number}-Report.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 3000);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Failed to generate report", "error");
     } finally {

@@ -9,6 +9,9 @@ const withPWA = require("next-pwa")({
 });
 
 const nextConfig: NextConfig = withPWA({
+  // pdfkit is CJS and reads internal font files via require() at runtime.
+  // Keeping it external prevents webpack from mangling those require() paths.
+  serverExternalPackages: ["pdfkit"],
   images: {
     remotePatterns: [
       {
